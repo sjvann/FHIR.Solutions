@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Fhir.TypeFramework/Fhir.TypeFramework.csproj" />
+  <Project Path="Fhir.TypeFramework.Tests/Fhir.TypeFramework.Tests.csproj" />
+</Solution>

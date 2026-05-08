@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using System.Collections.Concurrent;
+using System.Net.Http.Headers;
 using Fhir.Auth.TokenServer;
 using Fhir.QueryBuilder.Configuration;
 using Fhir.QueryBuilder.Metadata;
@@ -23,6 +24,9 @@ public sealed class FhirQueryService : IFhirQueryService
     private readonly ITokenServer _tokenServer;
     private HttpClient? _httpClient;
     private string? _activeBaseUrl;
+
+    /// <summary>component.definition canonical → 所屬 SearchParameter.type（快取，TD-1）。</summary>
+    private readonly ConcurrentDictionary<string, string?> _canonicalSearchParameterTypeCache = new();
 
     public FhirQueryService(
         ILogger<FhirQueryService> logger,
@@ -62,6 +66,7 @@ public sealed class FhirQueryService : IFhirQueryService
             _logger.LogInformation("Connecting to FHIR server: {BaseUrl}", baseUrl);
 
             var normalized = baseUrl.TrimEnd('/');
+            _canonicalSearchParameterTypeCache.Clear();
             var cacheKey = $"capability_{normalized}";
 
             if (_options.EnableCaching)
@@ -251,6 +256,109 @@ public sealed class FhirQueryService : IFhirQueryService
         }
 
         return Task.FromResult<IEnumerable<SearchParamModel>?>(list);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SearchParamComponentModel>?> TryGetCompositeSearchParameterComponentsAsync(
+        string resourceType,
+        string searchParamCode,
+        CancellationToken cancellationToken = default)
+    {
+        if (_httpClient == null || string.IsNullOrWhiteSpace(_activeBaseUrl))
+            return null;
+
+        var rt = resourceType.Trim();
+        var code = searchParamCode.Trim();
+        if (rt.Length == 0 || code.Length == 0)
+            return null;
+
+        var bundleJson = await FetchCompositeSearchParameterBundleJsonAsync(rt, code, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(bundleJson))
+            return null;
+
+        var definitions = SearchParameterCompositeParser.TryGetComponentDefinitionCanonicals(bundleJson);
+        if (definitions == null || definitions.Count < 2)
+            return null;
+
+        var list = new List<SearchParamComponentModel>();
+        for (var i = 0; i < definitions.Count; i++)
+        {
+            var def = definitions[i];
+            var resolvedType = await ResolveCanonicalSearchParameterTypeAsync(def, cancellationToken).ConfigureAwait(false);
+            list.Add(new SearchParamComponentModel
+            {
+                Index = i,
+                DefinitionCanonical = def,
+                ResolvedParameterType = resolvedType
+            });
+        }
+
+        return list;
+    }
+
+    private async Task<string?> FetchCompositeSearchParameterBundleJsonAsync(string resourceType, string code,
+        CancellationToken cancellationToken)
+    {
+        var baseUrl = _activeBaseUrl!.TrimEnd('/');
+        var queries = new[]
+        {
+            $"{baseUrl}/SearchParameter?base={Uri.EscapeDataString(resourceType)}&code={Uri.EscapeDataString(code)}&_count=8",
+            $"{baseUrl}/SearchParameter?code={Uri.EscapeDataString(code)}&_count=8",
+        };
+
+        foreach (var url in queries)
+        {
+            try
+            {
+                using var resp = await _httpClient!.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                    continue;
+                var json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (SearchParameterCompositeParser.TryGetComponentDefinitionCanonicals(json) != null)
+                    return json;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "SearchParameter composite probe failed: {Url}", url);
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string?> ResolveCanonicalSearchParameterTypeAsync(string? canonical,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(canonical) || _httpClient == null)
+            return null;
+
+        if (_canonicalSearchParameterTypeCache.TryGetValue(canonical, out var cached))
+            return cached;
+
+        var baseUrl = _activeBaseUrl!.TrimEnd('/');
+        var lookup =
+            $"{baseUrl}/SearchParameter?url={Uri.EscapeDataString(canonical)}&_count=1";
+
+        try
+        {
+            using var resp = await _httpClient.GetAsync(lookup, cancellationToken).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _canonicalSearchParameterTypeCache[canonical] = null;
+                return null;
+            }
+
+            var json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            var type = SearchParameterCompositeParser.TryGetFirstSearchParameterTypeFromBundle(json);
+            _canonicalSearchParameterTypeCache[canonical] = type;
+            return type;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Resolve SearchParameter type for {Canonical}", canonical);
+            _canonicalSearchParameterTypeCache.TryAdd(canonical, null);
+            return null;
+        }
     }
 
     public async Task<FhirQueryResult> ExecuteStructuredQueryAsync(string serverUrl, string query,

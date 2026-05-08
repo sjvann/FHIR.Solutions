@@ -70,8 +70,9 @@ namespace Fhir.QueryBuilder.QueryBuilders.Advanced
                 throw new ArgumentException("Composite parameters must have at least 2 components", nameof(components));
             }
 
-            var compositeValue = string.Join("$", components.Select(Uri.EscapeDataString));
-            
+            // Raw components joined by '$'; Build() applies Uri.EscapeDataString once on the full value.
+            var compositeValue = string.Join("$", components);
+
             _parameters.Add(new SearchParameter
             {
                 Name = name,

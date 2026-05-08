@@ -17,12 +17,9 @@ public sealed class FhirResourcePolymorphicJsonConverter : JsonConverter<Resourc
         JsonSerializerOptions template)
     {
         _typesByName = typesByName;
+        // 保留 template 上的 converters（含本 factory）：巢狀欄位若為抽象 Resource（例如 Bundle.entry[].resource）
+        // 仍須走同一套依 resourceType 分派，不可移除 factory；否則 STJ 無法反序列化抽象 Resource。
         _inner = new JsonSerializerOptions(template);
-        for (var i = _inner.Converters.Count - 1; i >= 0; i--)
-        {
-            if (_inner.Converters[i] is FhirResourcePolymorphicJsonConverterFactory)
-                _inner.Converters.RemoveAt(i);
-        }
     }
 
     public override Resource? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

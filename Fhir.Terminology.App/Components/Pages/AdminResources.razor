@@ -1,0 +1,225 @@
+@page "/admin/resources"
+@rendermode @(new InteractiveServerRenderMode())
+@inject ITerminologyRepository Repository
+
+<h2>術語資源（SQLite）</h2>
+
+<p style="max-width:780px;line-height:1.65;">
+    此處列出<strong>已寫入本機資料庫</strong>的 <code>CodeSystem</code>／<code>ValueSet</code>／<code>ConceptMap</code> 摘要（型別、邏輯 Id、canonical Url、版本）。
+    若要<strong>新增或批次匯入</strong>，請使用 <a href="/admin/import"><strong>匯入資源</strong></a> 頁面貼上／上傳 FHIR JSON，或使用 Scalar 發送 <code>POST /fhir/…</code>。
+</p>
+
+@if (_loadError is not null)
+{
+    <p style="padding:12px;background:#ffebee;border:1px solid #ef9a9a;border-radius:6px;max-width:720px;color:#b71c1c;">@_loadError</p>
+}
+else if (_allRows is null)
+{
+    <p>載入中…</p>
+}
+else if (_allRows.Count == 0)
+{
+    <div style="padding:14px 16px;background:#fff8e6;border:1px solid #e6d9a8;border-radius:6px;max-width:720px;">
+        <strong>尚無任何術語資源。</strong>
+        <ul style="margin:10px 0 0 1.1rem;line-height:1.7;">
+            <li>若已啟用 <code>Terminology:SeedDemoResources</code>，空資料庫於<strong>應用程式啟動時</strong>會自動種入示範 CodeSystem／ValueSet（請確認組態並重新啟動）。</li>
+            <li>或請前往 <a href="/admin/import"><strong>匯入資源</strong></a> 手動建立。</li>
+        </ul>
+    </div>
+}
+else
+{
+    <div style="margin:16px 0;padding:12px 14px;border:1px solid #ccc;border-radius:8px;background:#fafafa;max-width:960px;">
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div>
+                <label for="cat" style="display:block;font-weight:600;margin-bottom:4px;">類別</label>
+                <select id="cat" style="padding:6px 10px;min-width:160px;" @bind="_filterCategory" @bind:after="OnCategoryChanged">
+                    <option value="@FilterAll">全部</option>
+                    <option value="CodeSystem">CodeSystem</option>
+                    <option value="ValueSet">ValueSet</option>
+                    <option value="ConceptMap">ConceptMap</option>
+                </select>
+            </div>
+            <div style="flex:1;min-width:200px;max-width:420px;">
+                <label for="q" style="display:block;font-weight:600;margin-bottom:4px;">搜尋（Id／Url／Name／Title 包含即可）</label>
+                <input id="q" type="search" style="width:100%;padding:6px 10px;box-sizing:border-box;" placeholder="例如 loinc、internal-fhir、demo-" @bind="_searchText" @bind:event="oninput" @onkeydown="OnSearchKeyDown" />
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:2px;">
+                <button type="button" style="padding:6px 14px;border:1px solid #0d6efd;background:#0d6efd;color:#fff;border-radius:4px;cursor:pointer;" @onclick="ApplySearch">套用</button>
+                <button type="button" style="padding:6px 14px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;" @onclick="ClearSearch">清除條件</button>
+            </div>
+        </div>
+        <p style="margin:10px 0 0;font-size:0.9rem;color:#555;">
+            符合條件 <strong>@_filteredCount</strong> 筆；資料庫總計 <strong>@_allRows.Count</strong> 筆。每頁 @PageSize 筆。
+        </p>
+    </div>
+
+    @if (_filteredCount == 0)
+    {
+        <p style="margin-top:16px;padding:12px;background:#fff8e6;border:1px solid #e6d9a8;border-radius:6px;max-width:720px;">目前篩選條件下沒有資料，請調整類別或搜尋字串。</p>
+    }
+    else
+    {
+        <div style="overflow-x:auto;margin-top:12px;">
+            <table style="border-collapse:collapse;width:100%;max-width:960px;border:1px solid #ccc;">
+                <thead>
+                <tr style="background:#f0f0f0;">
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;">Type</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;">Id</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;">Url</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;">Version</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;width:110px;">REST</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var r in _pageSlice)
+                {
+                    <tr>
+                        <td style="padding:8px;border:1px solid #ccc;">@r.ResourceType</td>
+                        <td style="padding:8px;border:1px solid #ccc;"><code>@r.LogicalId</code></td>
+                        <td style="padding:8px;border:1px solid #ccc;word-break:break-all;">@(r.Url ?? "—")</td>
+                        <td style="padding:8px;border:1px solid #ccc;">@(r.Version ?? "—")</td>
+                        <td style="padding:8px;border:1px solid #ccc;font-size:0.85rem;">
+                            <a href="@($"/fhir/{r.ResourceType}/{r.LogicalId}")" target="_blank" rel="noopener noreferrer">GET</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+
+        @if (_totalPages > 1)
+        {
+            <div style="margin:16px 0;display:flex;flex-wrap:wrap;align-items:center;gap:10px;max-width:960px;">
+                <button type="button" disabled="@(_pageIndex <= 0)" style="padding:6px 12px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer;" @onclick="GoFirst">第一頁</button>
+                <button type="button" disabled="@(_pageIndex <= 0)" style="padding:6px 12px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer;" @onclick="GoPrev">上一頁</button>
+                <span style="font-size:0.95rem;">第 <strong>@( _pageIndex + 1 )</strong> / <strong>@_totalPages</strong> 頁</span>
+                <button type="button" disabled="@(_pageIndex >= _totalPages - 1)" style="padding:6px 12px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer;" @onclick="GoNext">下一頁</button>
+                <button type="button" disabled="@(_pageIndex >= _totalPages - 1)" style="padding:6px 12px;border:1px solid #888;background:#fff;border-radius:4px;cursor:pointer;" @onclick="GoLast">最末頁</button>
+            </div>
+        }
+
+        <p style="margin-top:12px;font-size:0.92rem;color:#555;">
+            編碼明細在資源的 JSON 內（例如 CodeSystem 的 <code>concept</code>）；若要試查詢請用 Scalar 或呼叫 <code>$lookup</code>／<code>$expand</code> 等術語操作。
+        </p>
+    }
+}
+
+@code {
+    private const string FilterAll = "all";
+    private const int PageSize = 50;
+
+    private List<StoredResourceRow>? _allRows;
+    private string? _loadError;
+
+    private string _filterCategory = FilterAll;
+    private string _searchText = "";
+
+    private List<StoredResourceRow> _filtered = [];
+    private int _filteredCount;
+    private int _pageIndex;
+    private int _totalPages = 1;
+    private IReadOnlyList<StoredResourceRow> _pageSlice = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var cs = await Repository.SearchAsync("CodeSystem", new TerminologySearchParameters());
+            var vs = await Repository.SearchAsync("ValueSet", new TerminologySearchParameters());
+            var cm = await Repository.SearchAsync("ConceptMap", new TerminologySearchParameters());
+            _allRows = cs.Concat(vs).Concat(cm).ToList();
+            RebuildFiltered(resetPage: true);
+        }
+        catch (Exception ex)
+        {
+            _loadError = "載入失敗：" + ex.Message;
+        }
+    }
+
+    private void OnCategoryChanged() => RebuildFiltered(resetPage: true);
+
+    private void ApplySearch() => RebuildFiltered(resetPage: true);
+
+    private void ClearSearch()
+    {
+        _filterCategory = FilterAll;
+        _searchText = "";
+        RebuildFiltered(resetPage: true);
+    }
+
+    private Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            ApplySearch();
+        return Task.CompletedTask;
+    }
+
+    private void GoFirst()
+    {
+        _pageIndex = 0;
+        SlicePage();
+    }
+
+    private void GoPrev()
+    {
+        if (_pageIndex > 0)
+            _pageIndex--;
+        SlicePage();
+    }
+
+    private void GoNext()
+    {
+        if (_pageIndex < _totalPages - 1)
+            _pageIndex++;
+        SlicePage();
+    }
+
+    private void GoLast()
+    {
+        _pageIndex = Math.Max(0, _totalPages - 1);
+        SlicePage();
+    }
+
+    private void RebuildFiltered(bool resetPage)
+    {
+        if (_allRows is null)
+            return;
+
+        IEnumerable<StoredResourceRow> q = _allRows;
+        if (_filterCategory != FilterAll)
+            q = q.Where(r => string.Equals(r.ResourceType, _filterCategory, StringComparison.Ordinal));
+
+        var term = _searchText.Trim();
+        if (term.Length > 0)
+        {
+            q = q.Where(r =>
+                ContainsIgnoreCase(r.LogicalId, term) ||
+                ContainsIgnoreCase(r.Url, term) ||
+                ContainsIgnoreCase(r.Name, term) ||
+                ContainsIgnoreCase(r.Title, term));
+        }
+
+        _filtered = q
+            .OrderBy(r => r.ResourceType, StringComparer.Ordinal)
+            .ThenBy(r => r.LogicalId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _filteredCount = _filtered.Count;
+        _totalPages = Math.Max(1, (_filteredCount + PageSize - 1) / PageSize);
+
+        if (resetPage)
+            _pageIndex = 0;
+        else if (_pageIndex >= _totalPages)
+            _pageIndex = Math.Max(0, _totalPages - 1);
+
+        SlicePage();
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string needle)
+        => value is not null && value.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    private void SlicePage()
+    {
+        _pageSlice = _filtered.Skip(_pageIndex * PageSize).Take(PageSize).ToList();
+    }
+}

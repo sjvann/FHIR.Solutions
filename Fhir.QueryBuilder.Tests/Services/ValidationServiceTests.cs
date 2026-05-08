@@ -187,5 +187,41 @@ namespace Fhir.QueryBuilder.Tests.Services
                 result.IsValid.Should().BeFalse();
             }
         }
+
+        [Fact]
+        public void ValidateSearchParameter_Composite_WithTwoComponents_IsValid()
+        {
+            var result = _validationService.ValidateSearchParameter("combo", "a$b", "composite");
+
+            result.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void ValidateSearchParameter_Composite_WithOneComponent_IsInvalid()
+        {
+            var result = _validationService.ValidateSearchParameter("combo", "only", "composite");
+
+            result.IsValid.Should().BeFalse();
+            result.Errors.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void ValidateSearchParameter_Special_ShortValue_HasNoWarnings()
+        {
+            var result = _validationService.ValidateSearchParameter("specialParam", "expr", "special");
+
+            result.IsValid.Should().BeTrue();
+            result.Warnings.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void ValidateSearchParameter_Special_VeryLong_Warns()
+        {
+            var longVal = new string('x', 2001);
+            var result = _validationService.ValidateSearchParameter("specialParam", longVal, "special");
+
+            result.IsValid.Should().BeTrue();
+            result.Warnings.Should().Contain(w => w.Contains("long", StringComparison.OrdinalIgnoreCase));
+        }
     }
 }

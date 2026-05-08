@@ -20,4 +20,10 @@ public sealed class WindowsFilePickerSaveTextService : IFilePickerSaveTextServic
             ? Task.FromResult<string?>(dlg.FileName)
             : Task.FromResult<string?>(null);
     }
+
+    public Task SaveTextAsync(string path, string content, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return File.WriteAllTextAsync(path, content, cancellationToken);
+    }
 }

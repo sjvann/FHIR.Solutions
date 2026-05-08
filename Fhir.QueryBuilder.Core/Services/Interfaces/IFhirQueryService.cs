@@ -15,6 +15,15 @@ namespace Fhir.QueryBuilder.Services.Interfaces
         Task<string[]?> GetSearchIncludeAsync(string resourceName, CancellationToken cancellationToken = default);
         Task<string[]?> GetSearchRevIncludeAsync(string resourceName, CancellationToken cancellationToken = default);
         Task<IEnumerable<SearchParamModel>?> GetSearchParametersAsync(string resourceName, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// TD-1：自伺服器載入 composite SearchParameter 之 <c>component</c>（至少兩筆 definition）。
+        /// </summary>
+        Task<IReadOnlyList<SearchParamComponentModel>?> TryGetCompositeSearchParameterComponentsAsync(
+            string resourceType,
+            string searchParamCode,
+            CancellationToken cancellationToken = default);
+
         bool IsConnected { get; }
         string? BaseUrl { get; }
         bool SupportOAuth { get; }

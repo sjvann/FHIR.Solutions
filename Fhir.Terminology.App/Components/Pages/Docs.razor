@@ -1,0 +1,75 @@
+@page "/docs"
+@page "/manual"
+
+<PageTitle>FHIR Terminology — 使用說明</PageTitle>
+
+<article style="max-width:52rem;line-height:1.55;">
+    <h1>FHIR Terminology Service — 使用說明</h1>
+    <p style="color:#555;">本頁為<strong>線上操作手冊</strong>（與儲存庫 <code>Fhir.Docs/terminology/</code> 長文件互補）。建議整合前先閱讀「解析順序」與「錯誤處理」。</p>
+
+    <h2 id="entry">1. 入口與工具</h2>
+    <ul>
+        <li><strong><a href="/scalar/v1" target="_blank" rel="noopener noreferrer">Scalar REST 文件</a></strong>（<code>/scalar/v1</code>）：依 OpenAPI 試打所有 HTTP 端點；各操作已附<strong>中文摘要與說明</strong>（請展開操作檢視 Description）。</li>
+        <li><strong>OpenAPI JSON</strong>：<code>GET /openapi/v1.json</code>（給程式或匯入其他工具）。</li>
+        <li><strong>健康檢查</strong>：<code>GET /health</code> → 本文 <code>ok</code>（非 FHIR）。</li>
+        <li>若不需對外暴露 Scalar／OpenAPI，請設定 <strong><code>Terminology:EnableApiReference=false</code></strong>。</li>
+    </ul>
+
+    <h2 id="base">2. FHIR 基底路徑</h2>
+    <p>所有 FHIR JSON API 掛在 <strong><code>[網站基底]/fhir</code></strong>。例如：</p>
+    <ul>
+        <li><code>GET /fhir/metadata</code> → CapabilityStatement 或 TerminologyCapabilities（查詢參數 <code>mode=terminology</code>）。</li>
+        <li><code>GET /fhir/CodeSystem?$url=...</code> → SEARCH（Bundle）。</li>
+        <li><code>POST /fhir/ValueSet</code> → 建立 ValueSet（本文 <code>application/fhir+json</code>）。</li>
+    </ul>
+
+    <h2 id="resolve">3. 解析順序（很重要）</h2>
+    <ol>
+        <li><strong>本機 SQLite</strong>：若已有對應 CodeSystem／ValueSet／ConceptMap，優先在本機完成 $lookup、$expand、驗證、對照等。</li>
+        <li><strong>遠端 upstream</strong>：本機無資料或無法計算時，將<strong>同一 FHIR 操作與查詢字串</strong>轉發至您設定之上游術語伺服器（見「管理」）。</li>
+        <li><strong>失敗</strong>：回傳 <strong>OperationOutcome</strong>（請看 HTTP 狀態碼與 <code>issue.diagnostics</code>）。</li>
+    </ol>
+
+    <h2 id="ops">4. Terminology 操作（GET）</h2>
+    <p>下列路徑皆在 <code>/fhir</code> 之下；詳細查詢參數請見 Scalar 各項說明。</p>
+    <table class="table" style="font-size:0.95rem;">
+        <thead><tr><th>操作</th><th>路徑概念</th></tr></thead>
+        <tbody>
+            <tr><td>CodeSystem $lookup</td><td><code>/fhir/CodeSystem/$lookup?code=&amp;system=</code></td></tr>
+            <tr><td>CodeSystem $validate-code</td><td><code>/fhir/CodeSystem/$validate-code?code=</code> …</td></tr>
+            <tr><td>CodeSystem $subsumes</td><td><code>/fhir/CodeSystem/$subsumes?codeA=&amp;codeB=&amp;system=</code></td></tr>
+            <tr><td>ValueSet $expand</td><td><code>/fhir/ValueSet/$expand?url=</code> 或 <code>/fhir/ValueSet/{id}/$expand</code></td></tr>
+            <tr><td>ValueSet $validate-code</td><td>可加 <code>profile</code> + <code>path</code> 走 Binding 登錄</td></tr>
+            <tr><td>ConceptMap $translate</td><td><code>/fhir/ConceptMap/$translate?code=&amp;system=</code></td></tr>
+        </tbody>
+    </table>
+
+    <h2 id="admin">5. 管理：匯入、資源、綁定與上游</h2>
+    <ul>
+        <li><strong><a href="/admin/import">匯入資源</a></strong>：貼上或上傳 FHIR JSON，建立 CodeSystem／ValueSet／ConceptMap（等同 <code>POST /fhir/{類型}</code>）；並附範例與錯誤說明。</li>
+        <li><strong>首次空庫</strong>：若 <code>Terminology:SeedDemoResources=true</code>（見 <code>appsettings.json</code>），啟動遷移後會自動種入<strong>示範</strong> administrative-gender CodeSystem 與對應 ValueSet（僅在資料庫尚無任何術語資源時）。正式環境若不想要示範資料請設為 <code>false</code>。</li>
+        <li><strong>外部編碼系統登錄</strong>：若 <code>Terminology:SeedExternalCanonicalCodeSystems=true</code>，啟動時會為 HL7 常見 external URI（SNOMED、LOINC、RxNorm、UCUM 等）建立最小 <code>CodeSystem</code>（<code>content=not-present</code>，僅供識別 URI／OID，不含完整詞表）。已存在之 logical id 不會重複寫入。</li>
+        <li><strong>內部（FHIR 規格）Code systems</strong>：若 <code>Terminology:SeedInternalFhirCodeSystems=true</code>，啟動時依內建清單為 <code>http://hl7.org/fhir/{slug}</code> 建立 stub（與 <a href="https://www.hl7.org/fhir/terminologies-systems.html" target="_blank" rel="noopener noreferrer">terminologies-systems.html</a> §4.3.0.2 對齊；約四百餘筆）。若某 <code>url</code> 已有 CodeSystem（例如示範 administrative-gender）則略過。</li>
+        <li><strong>REST</strong>：前綴 <code>/fhir/admin/registry</code> — bindings／upstreams 的 GET、POST、DELETE（JSON 本文見 Scalar 說明）。</li>
+        <li><strong>Blazor</strong>：<a href="/admin/bindings">綁定登錄</a>、<a href="/admin/upstreams">上游端點</a>、<a href="/admin/resources">資源列表</a>。</li>
+        <li><strong>Binding</strong>：將 Profile URL + 元素 path 對應到 ValueSet canonical，供 <code>$validate-code?profile=&amp;path=</code> 使用。</li>
+        <li><strong>Upstream</strong>：<code>systemUriPrefix</code> 對應 Coding.system 前綴；<code>baseUrl</code> 須含 <code>/fhir</code>。</li>
+    </ul>
+
+    <h2 id="config">6. 組態摘要</h2>
+    <ul>
+        <li><strong>SQLite</strong>：<code>ConnectionStrings:Terminology</code>（必填）。</li>
+        <li><strong>Scalar／OpenAPI</strong>：<code>Terminology:EnableApiReference</code>（預設 true）。</li>
+        <li><strong>示範種子</strong>：<code>Terminology:SeedDemoResources</code>（預設 true）— 空庫時種入示範詞表；整合測試或乾淨環境請設 <code>false</code>。</li>
+        <li><strong>外部 canonical 登錄</strong>：<code>Terminology:SeedExternalCanonicalCodeSystems</code>（預設 true）— 種入 FHIR 外部編碼系統 stub；不需請設 <code>false</code>。</li>
+        <li><strong>FHIR 內部 stub</strong>：<code>Terminology:SeedInternalFhirCodeSystems</code>（預設 true）— 大量 <code>http://hl7.org/fhir/…</code> 登錄；輕量環境請設 <code>false</code>。</li>
+    </ul>
+
+    <h2 id="errors">7. 錯誤</h2>
+    <p>客戶端應解析 <strong>OperationOutcome</strong>；常見：參數不足（400）、資源不存在（404）、上游無法連線或逾時（仍可能以 OO 或對端狀態呈現）。</p>
+
+    <h2 id="more">8. 更多文件</h2>
+    <p>儲存庫內完整 PDF 級說明：<strong>Fhir.Docs/terminology/user-manual.md</strong>（與程式同版維護）。</p>
+
+    <p style="margin-top:2rem;"><a href="/">← 回首頁</a></p>
+</article>

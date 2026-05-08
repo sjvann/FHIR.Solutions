@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Fhir.QueryBuilder.SearchUi;
@@ -46,4 +47,15 @@ public partial class TypedSearchDraft : ObservableObject
     [ObservableProperty] private string _quantityNscNumber = "";
     [ObservableProperty] private string _quantityNscSystem = "";
     [ObservableProperty] private string _quantityNscCode = "";
+
+    // composite (comma-separated raw components; joined with $ — URL escape applied once later)
+    [ObservableProperty] private string? _compositeGroupModifier;
+    [ObservableProperty] private string _compositeComponentsCsv = "";
+
+    /// <summary>TD-1：伺服器載入 component 後之動態欄（至少 2 列時組句優先於 <see cref="CompositeComponentsCsv"/>）。</summary>
+    public ObservableCollection<CompositePartRow> CompositePartRows { get; } = new();
+
+    // special (free-form per SearchParameter definition)
+    [ObservableProperty] private string? _specialGroupModifier;
+    [ObservableProperty] private string _specialValue = "";
 }

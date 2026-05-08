@@ -4,6 +4,7 @@
 
 | 類別 | 路徑 | 說明 |
 |------|------|------|
+| **FHIR Terminology Service（對外）** | [terminology/README.md](terminology/README.md) | **術語伺服器**：部署、REST／操作、管理 API、Blazor — [完整使用手冊](terminology/user-manual.md)、[HTTP 速查](terminology/reference/http-api.md) |
 | 整體架構 | [architecture/overview.md](architecture/overview.md) | 元件角色、資料流、與 NuGet 邊界 |
 | 使用手冊 | [guides/user-manual.md](guides/user-manual.md) | 設定檔、執行產生器、輸出目錄與命名 |
 | 測試手冊 | [guides/testing-manual.md](guides/testing-manual.md) | 雙層測試、本機驗證指令 |

@@ -26,4 +26,10 @@ public sealed class AvaloniaFilePickerSaveTextService(AvaloniaTopLevelAccessor t
 
         return file?.TryGetLocalPath();
     }
+
+    public Task SaveTextAsync(string path, string content, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return File.WriteAllTextAsync(path, content, cancellationToken);
+    }
 }

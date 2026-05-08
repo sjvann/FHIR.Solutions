@@ -96,6 +96,12 @@ namespace Fhir.QueryBuilder.Services
                 case "uri":
                     ValidateUriParameter(parameterValue, result);
                     break;
+                case "composite":
+                    ValidateCompositeParameter(parameterValue, result);
+                    break;
+                case "special":
+                    ValidateSpecialParameter(parameterValue, result);
+                    break;
                 default:
                     result.AddWarning($"Unknown parameter type: {parameterType}");
                     break;
@@ -264,6 +270,28 @@ namespace Fhir.QueryBuilder.Services
             {
                 result.AddError("Invalid URI format");
             }
+        }
+
+        private void ValidateCompositeParameter(string value, ValidationResult result)
+        {
+            var parts = value.Split('$', StringSplitOptions.None);
+            if (parts.Length < 2)
+            {
+                result.AddError("Composite search value must contain at least two components separated by '$'");
+                return;
+            }
+
+            foreach (var p in parts)
+            {
+                if (string.IsNullOrWhiteSpace(p))
+                    result.AddWarning("Empty composite component");
+            }
+        }
+
+        private void ValidateSpecialParameter(string value, ValidationResult result)
+        {
+            if (value.Length > 2000)
+                result.AddWarning("Special search parameter value is very long; format is server-specific");
         }
 
         public ValidationResult ValidateConnectionSettings(string serverUrl, string? token = null)

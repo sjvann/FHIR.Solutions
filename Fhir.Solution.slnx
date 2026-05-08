@@ -2,6 +2,7 @@
   <Project Path="Fhir.Auth.TokenServer/Fhir.Auth.TokenServer.csproj" />
   <Project Path="Fhir.Docs/Fhir.Docs.csproj" Id="eba1c9ae-bd80-4804-8f05-96c5ed08d938" />
   <Project Path="Fhir.QueryBuilder.App.Avalonia/Fhir.QueryBuilder.App.Avalonia.csproj" />
+  <Project Path="Fhir.QueryBuilder.App.Blazor/Fhir.QueryBuilder.App.Blazor.csproj" />
   <Project Path="Fhir.QueryBuilder.Core/Fhir.QueryBuilder.Core.csproj" />
   <Project Path="Fhir.QueryBuilder.Tests/Fhir.QueryBuilder.Tests.csproj" />
   <Project Path="Fhir.QueryBuilder/Fhir.QueryBuilder.csproj" />
@@ -11,4 +12,8 @@
   <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R5/Fhir.Resources.R5.Tests/Fhir.Resources.R5.Tests.csproj" />
   <Project Path="Fhir.TypeFramework.Tests/Fhir.TypeFramework.Tests.csproj" />
   <Project Path="Fhir.TypeFramework/Fhir.TypeFramework.csproj" />
+  <Project Path="Fhir.Terminology.App/Fhir.Terminology.App.csproj" />
+  <Project Path="Fhir.Terminology.Core/Fhir.Terminology.Core.csproj" />
+  <Project Path="Fhir.Terminology.Infrastructure/Fhir.Terminology.Infrastructure.csproj" />
+  <Project Path="Fhir.Terminology.Tests/Fhir.Terminology.Tests.csproj" />
 </Solution>

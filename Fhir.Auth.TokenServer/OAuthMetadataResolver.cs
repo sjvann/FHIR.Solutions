@@ -70,8 +70,22 @@ public sealed class OAuthMetadataResolver : IOAuthMetadataResolver
             using var resp = await client.GetAsync(discoveryUrl, cancellationToken).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
-                _logger.LogWarning("well-known SMART discovery HTTP {Status} for {Url}", resp.StatusCode,
-                    discoveryUrl);
+                // 多數公開測試伺服器未實作 SMART well-known（常見 501/404），不影響僅讀 metadata／匿名查詢之「已連線」。
+                // 瀏覽器 Network 仍可能顯示該 GET 為紅字，屬正常，非授權流程失敗。
+                if (resp.StatusCode is System.Net.HttpStatusCode.NotImplemented
+                    or System.Net.HttpStatusCode.NotFound
+                    or System.Net.HttpStatusCode.MethodNotAllowed)
+                {
+                    _logger.LogInformation(
+                        "SMART well-known 未提供（HTTP {Status}）— 將改以 CapabilityStatement 等管道取得 OAuth 端點（若有的話）。{Url}",
+                        (int)resp.StatusCode, discoveryUrl);
+                }
+                else
+                {
+                    _logger.LogWarning("well-known SMART discovery HTTP {Status} for {Url}", resp.StatusCode,
+                        discoveryUrl);
+                }
+
                 return null;
             }
 

@@ -1,0 +1,339 @@
+﻿@page "/"
+@implements IDisposable
+@inject MainViewModel Vm
+
+<div class="container-fluid py-3 qb-blazor">
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <div class="row g-2 align-items-center mb-2">
+                <div class="col-lg-5">
+                    <input class="form-control" placeholder="FHIR base URL" @bind="Vm.ServerUrl" @bind:event="oninput" />
+                </div>
+                <div class="col-lg-3">
+                    <button type="button" class="btn btn-primary me-2" disabled="@Vm.IsLoading"
+                            @onclick="@ConnectAsync">Connect</button>
+                    <button type="button" class="btn btn-outline-secondary" disabled="@(!Vm.IsLoading)"
+                            @onclick="@CancelOp">Cancel</button>
+                </div>
+                <div class="col-lg-4">
+                    <label class="form-label small text-muted mb-0">Resource type</label>
+                    <select class="form-select form-select-sm" disabled="@(!Vm.IsConnected)"
+                            value="@Vm.SelectedResource"
+                            @onchange="OnResourceChangedAsync">
+                        <option value="">—</option>
+                        @foreach (var r in Vm.SupportedResources)
+                        {
+                            <option value="@r">@r</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="mb-2">
+                <label class="form-label small text-muted mb-0">Bearer access token（選填）</label>
+                <input type="password" class="form-control form-control-sm" autocomplete="off"
+                       @bind="Vm.BearerAccessToken" @bind:event="oninput" />
+            </div>
+
+            @if (Vm.SupportOAuth)
+            {
+                <div class="border rounded p-3 mt-2 bg-light bg-opacity-25">
+                    <div class="fw-semibold small mb-2">SMART on FHIR</div>
+                    <div class="row g-2 mb-2">
+                        <label class="col-sm-2 col-form-label small">Client ID</label>
+                        <div class="col-sm-10">
+                            <input class="form-control form-control-sm" @bind="Vm.SmartClientId" @bind:event="oninput" />
+                        </div>
+                    </div>
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Scopes"
+                              @bind="Vm.SmartScopes"></textarea>
+                    <textarea class="form-control form-control-sm mb-2 font-monospace" rows="3" placeholder="機密客戶端 PEM"
+                              @bind="Vm.SmartPrivateKeyPem"></textarea>
+                    @if (!string.IsNullOrWhiteSpace(Vm.SmartPatientSummary))
+                    {
+                        <p class="small text-muted mb-2">@Vm.SmartPatientSummary</p>
+                    }
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-outline-primary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@SmartLoginAsync">SMART 登入（瀏覽器 PKCE）</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@RefreshSmartAsync">刷新 access token</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@JwtCcAsync">JWT client_credentials</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@ClearSmart">清除 SMART session</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenAuthUrl">Open authorize URL</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenTokUrl">Open token URL</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@CopyTokenUrlAsync">Copy token URL</button>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(Vm.TokenUrl))
+                    {
+                        <p class="small text-break opacity-75 mt-2 mb-0">@Vm.TokenUrl</p>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (Vm.HasValidationErrors)
+    {
+        <div class="alert alert-warning py-2 d-flex justify-content-between align-items-start">
+            <div>
+                @foreach (var err in Vm.ValidationErrors)
+                {
+                    <div>@err</div>
+                }
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-dark" @onclick="@ClearVal">Clear</button>
+        </div>
+    }
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-lg-7">
+                    <input class="form-control form-control-sm" placeholder="Full query URL" @bind="Vm.QueryUrl" @bind:event="oninput" />
+                </div>
+                <div class="col-lg-5 text-lg-end">
+                    <button type="button" class="btn btn-outline-secondary btn-sm me-1" disabled="@Vm.IsLoading"
+                            @onclick="@BuildComposed">Build composed URL</button>
+                    <button type="button" class="btn btn-primary btn-sm me-1" disabled="@Vm.IsLoading"
+                            @onclick="@ExecuteAsync">Execute query</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                            @onclick="@ClearUrl">Clear URL</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-2">
+        <div class="col-xl-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header py-2 small fw-semibold">Query</div>
+                <div class="card-body p-2">
+                    <div class="btn-group btn-group-sm mb-2" role="group">
+                        <button type="button" class="btn @(QueryTab == "params" ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="@(() => QueryTab = "params")">Search parameters</button>
+                        <button type="button" class="btn @(QueryTab == "advanced" ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="@(() => QueryTab = "advanced")">Advanced</button>
+                        <button type="button" class="btn @(QueryTab == "modify" ? "btn-primary" : "btn-outline-primary")"
+                                @onclick="@(() => QueryTab = "modify")">Modifying results</button>
+                    </div>
+
+                    @if (QueryTab == "params")
+                    {
+                        <div class="row g-2">
+                            <div class="col-md-6 border-end min-w-0">
+                                <div class="small fw-semibold mb-2">Capability search params</div>
+                                <select class="form-select form-select-sm" size="14"
+                                        style="min-height:240px"
+                                        @bind="SelectedCapabilitySearchParamName"
+                                        @bind:after="OnCapabilitySearchParamBindAfterAsync">
+                                    <option value="">—</option>
+                                    @foreach (var p in Vm.SearchParameters)
+                                    {
+                                        <option value="@p.Name">@p.DisplayText</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6 min-w-0 ps-md-2 bg-body">
+                                <TypedSearchPanel @key="CapabilitySelectionUiKey" />
+                            </div>
+                        </div>
+                    }
+                    else if (QueryTab == "advanced")
+                    {
+                        <AdvancedSearchPanel />
+                    }
+                    else
+                    {
+                        <ModifyingSearchPanel />
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3">
+            <div class="card shadow-sm mb-2">
+                <div class="card-header py-2 small fw-semibold">Draft query lines</div>
+                <div class="card-body p-2">
+                    @if (Vm.DraftSearchParameters.Count > 0)
+                    {
+                        <select class="form-select form-select-sm mb-2" size="10" style="min-height:160px"
+                                @bind="Vm.SelectedDraftParameter">
+                            @foreach (var line in Vm.DraftSearchParameters)
+                            {
+                                <option value="@line">@line</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-2">（尚無 draft 行）</p>
+                    }
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                @onclick="@RemoveDraft">Remove selected</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                @onclick="@ClearDraft">Clear all</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card shadow-sm">
+                <div class="card-header py-2">
+                    <div class="btn-group btn-group-sm w-100" role="group">
+                        <button type="button" class="btn @(IncTab == "inc" ? "btn-secondary" : "btn-outline-secondary")"
+                                @onclick="@(() => IncTab = "inc")">_include</button>
+                        <button type="button" class="btn @(IncTab == "rev" ? "btn-secondary" : "btn-outline-secondary")"
+                                @onclick="@(() => IncTab = "rev")">_revinclude</button>
+                    </div>
+                </div>
+                <div class="card-body p-2 small" style="max-height:280px; overflow-y:auto">
+                    @if (IncTab == "inc")
+                    {
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="incAll" @bind="Vm.IncludeTakeAll" />
+                            <label class="form-check-label" for="incAll">Emit every listed path</label>
+                        </div>
+                        @foreach (var row in Vm.IncludeChoices)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="@($"inc-{row.Value}")"
+                                       checked="@row.IsSelected"
+                                       @onchange="@(e => SetIncludeRow(row, e))" />
+                                <label class="form-check-label" for="@($"inc-{row.Value}")">@row.Value</label>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="revAll" @bind="Vm.RevIncludeTakeAll" />
+                            <label class="form-check-label" for="revAll">Emit every listed path</label>
+                        </div>
+                        @foreach (var row in Vm.RevIncludeChoices)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="@($"rev-{row.Value}")"
+                                       checked="@row.IsSelected"
+                                       @onchange="@(e => SetIncludeRow(row, e))" />
+                                <label class="form-check-label" for="@($"rev-{row.Value}")">@row.Value</label>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header py-2 small fw-semibold">Result</div>
+                <div class="card-body p-2 d-flex flex-column" style="min-height:320px">
+                    @if (Vm.ShowQueryResultAsTree)
+                    {
+                        <div class="flex-grow-1 overflow-auto font-monospace small border rounded p-2 bg-white">
+                            <ErrorBoundary>
+                                <ChildContent>
+                                    <JsonTreeDisplay Nodes="@Vm.QueryResultTreeRoots" />
+                                </ChildContent>
+                                <ErrorContent>
+                                    <div class="alert alert-danger small mb-0">
+                                        樹狀顯示發生錯誤（JSON 可能過大或過深）。請改用「Message view」檢視原始文字。
+                                    </div>
+                                </ErrorContent>
+                            </ErrorBoundary>
+                        </div>
+                    }
+                    else
+                    {
+                        <textarea class="form-control flex-grow-1 font-monospace small" rows="14"
+                                  placeholder="JSON" @bind="Vm.QueryResult"></textarea>
+                    }
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@CopyResultAsync">Copy</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@SaveResultAsync">Save…</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@ClearResult">Clear</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
+                                @onclick="@ToggleTree">@Vm.ResultViewToggleLabel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p class="small text-muted mt-2 mb-0">@Vm.StatusMessage</p>
+</div>
+
+@code {
+    private IDisposable? _binder;
+    private string QueryTab { get; set; } = "params";
+    private string IncTab { get; set; } = "inc";
+
+    private string SelectedCapabilitySearchParamName
+    {
+        get => Vm.SelectedSearchParameter?.Name ?? "";
+        set
+        {
+            var v = value ?? "";
+            Vm.SelectedSearchParameter = string.IsNullOrEmpty(v)
+                ? null
+                : Vm.SearchParameters.FirstOrDefault(p =>
+                    string.Equals(p.Name, v, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private string CapabilitySelectionUiKey =>
+        Vm.SelectedSearchParameter is { } p ? $"{p.Name}:{p.Type}" : "";
+
+    private Task OnCapabilitySearchParamBindAfterAsync() => InvokeAsync(StateHasChanged);
+
+    protected override void OnInitialized()
+    {
+        Vm.SetUiThreadPost(a =>
+        {
+            _ = InvokeAsync(() =>
+            {
+                a();
+                StateHasChanged();
+            });
+        });
+        _binder = MainViewModelRefreshBinder.Attach(Vm, () => InvokeAsync(StateHasChanged));
+    }
+
+    public void Dispose() => _binder?.Dispose();
+
+    private void SetIncludeRow(Fhir.QueryBuilder.Models.SelectableIncludeRow row, ChangeEventArgs e)
+    {
+        row.IsSelected = e.Value is bool b && b;
+        StateHasChanged();
+    }
+
+    private async Task OnResourceChangedAsync(ChangeEventArgs e)
+    {
+        Vm.SelectedResource = e.Value?.ToString() ?? "";
+        await Vm.SelectResourceCommand.ExecuteAsync(null);
+    }
+
+    private Task ConnectAsync() => Vm.ConnectToServerCommand.ExecuteAsync(null);
+    private void CancelOp() => Vm.CancelOperationCommand.Execute(null);
+    private Task ExecuteAsync() => Vm.ExecuteQueryCommand.ExecuteAsync(null);
+    private Task SmartLoginAsync() => Vm.RunSmartBrowserLoginCommand.ExecuteAsync(null);
+    private Task RefreshSmartAsync() => Vm.RefreshSmartTokenCommand.ExecuteAsync(null);
+    private Task JwtCcAsync() => Vm.RunSmartClientCredentialsJwtCommand.ExecuteAsync(null);
+    private Task CopyTokenUrlAsync() => Vm.CopyTokenUrlCommand.ExecuteAsync(null);
+
+    private void BuildComposed() => Vm.BuildComposedQueryCommand.Execute(null);
+    private void RemoveDraft() => Vm.RemoveSelectedDraftFromListCommand.Execute(null);
+    private void ClearDraft() => Vm.ClearAllDraftSearchParametersCommand.Execute(null);
+    private Task CopyResultAsync() => Vm.CopyQueryResultCommand.ExecuteAsync(null);
+    private Task SaveResultAsync() => Vm.SaveQueryResultCommand.ExecuteAsync(null);
+    private void ClearResult() => Vm.ClearQueryResultFieldCommand.Execute(null);
+    private void ToggleTree() => Vm.ToggleQueryResultTreeCommand.Execute(null);
+    private void ClearSmart() => Vm.ClearSmartSessionCommand.Execute(null);
+    private void OpenAuthUrl() => Vm.OpenAuthorizeUrlCommand.Execute(null);
+    private void OpenTokUrl() => Vm.OpenTokenUrlCommand.Execute(null);
+    private void ClearUrl() => Vm.ClearQueryUrlFieldCommand.Execute(null);
+    private void ClearVal() => Vm.ClearValidationErrorsCommand.Execute(null);
+}

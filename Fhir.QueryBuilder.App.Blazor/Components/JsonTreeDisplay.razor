@@ -1,0 +1,25 @@
+@using Fhir.QueryBuilder.SearchUi
+
+@if (Nodes != null)
+{
+    @foreach (var node in Nodes.ToList())
+    {
+        @if (node.Children.Count > 0)
+        {
+            <details class="json-tree-details mb-1">
+                <summary class="font-monospace small text-break">@node.Header</summary>
+                <div class="ps-3 ms-1 mt-1 border-start">
+                    <JsonTreeDisplay Nodes="@node.Children" />
+                </div>
+            </details>
+        }
+        else
+        {
+            <div class="json-tree-leaf font-monospace small text-break mb-1 ps-1">@node.Header</div>
+        }
+    }
+}
+
+@code {
+    [Parameter] public IEnumerable<JsonTreeItem>? Nodes { get; set; }
+}

@@ -56,12 +56,23 @@ namespace Fhir.QueryBuilder.Services
                 _recentErrors.TryDequeue(out _);
             }
 
-            // Log using Microsoft.Extensions.Logging
+            // Log using Microsoft.Extensions.Logging（Info 等非錯誤語意勿用「Error from」字樣）
             var logLevel = GetLogLevel(errorInfo.Severity);
-            _logger.Log(logLevel, errorInfo.Exception, 
-                "Error from {Source}: {Message}", 
-                errorInfo.Source ?? "Unknown", 
-                errorInfo.Message);
+            if (errorInfo.Severity == ErrorSeverity.Info)
+            {
+                _logger.LogInformation(errorInfo.Exception,
+                    "{Source}: {Message}",
+                    errorInfo.Source ?? "Unknown",
+                    errorInfo.Message);
+            }
+            else
+            {
+                _logger.Log(logLevel, errorInfo.Exception,
+                    "{Severity} from {Source}: {Message}",
+                    errorInfo.Severity,
+                    errorInfo.Source ?? "Unknown",
+                    errorInfo.Message);
+            }
 
             // Raise event
             ErrorOccurred?.Invoke(this, errorInfo);

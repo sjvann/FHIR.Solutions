@@ -66,9 +66,9 @@ namespace Fhir.QueryBuilder.Tests.QueryBuilders
                     "mmHg")
                 .BuildQueryString();
 
-            // Assert
+            // Assert — single EscapeDataString on full composite value encodes '$' as %24
             Assert.Contains("component-code-value-quantity=", query);
-            Assert.Contains("$", query); // Composite separator
+            Assert.Contains("%24", query);
             Output.WriteLine($"Composite query: {query}");
         }
 

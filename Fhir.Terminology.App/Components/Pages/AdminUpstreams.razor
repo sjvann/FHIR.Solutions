@@ -1,0 +1,221 @@
+@page "/admin/upstreams"
+@using System.Net
+@inject ITerminologyRepository Repository
+@inject TerminologyOrchestrator Orchestrator
+
+<h2>遠端術語上游</h2>
+
+<p>
+    當本機 SQLite 沒有對應的 CodeSystem／ValueSet 等資源時，可依下方設定將<strong>同一支 FHIR 術語操作</strong>轉發到相容的遠端伺服器（例如公開術語服務或貴司 Ontoserver）。
+</p>
+
+<details style="margin:12px 0;padding:8px;border:1px solid #ddd;background:#fafafa;max-width:720px;">
+    <summary style="cursor:pointer;font-weight:600;">路由規則（點開）</summary>
+    <ul style="margin:8px 0 0 1rem;line-height:1.6;">
+        <li>請求若帶 <code>system</code> 查詢參數，會選<strong>第一個</strong>滿足「<code>system</code> 以此處的 <strong>System URI 前綴</strong>開頭」的上游（前綴愈長愈優先）。</li>
+        <li>若無符合前綴，則使用清單中<strong>排序第一筆</strong>上游。</li>
+        <li>LOINC 請使用前綴 <code>http://loinc.org</code>；SNOMED CT 常為 <code>http://snomed.info/sct</code>。</li>
+    </ul>
+</details>
+
+@if (_rows is null)
+{
+    <p>載入中…</p>
+}
+else if (_rows.Count == 0)
+{
+    <p style="padding:12px;background:#fff8e6;border:1px solid #e6d9a8;border-radius:4px;max-width:720px;">
+        目前<strong>尚未設定</strong>任何上游。查詢 LOINC／SNOMED 等若本機無詞表，會得到「找不到 CodeSystem」類錯誤；請於下方新增，或改在本機 <code>POST /fhir/CodeSystem</code> 匯入資源。
+    </p>
+}
+else
+{
+    <div style="overflow-x:auto;margin-bottom:16px;">
+        <table style="border-collapse:collapse;width:100%;max-width:960px;border:1px solid #ccc;">
+            <thead>
+            <tr style="background:#f0f0f0;">
+                <th style="padding:8px;border:1px solid #ccc;text-align:left;">System URI 前綴</th>
+                <th style="padding:8px;border:1px solid #ccc;text-align:left;">Base URL</th>
+                <th style="padding:8px;border:1px solid #ccc;text-align:center;">逾時（秒）</th>
+                <th style="padding:8px;border:1px solid #ccc;text-align:center;">授權</th>
+                <th style="padding:8px;border:1px solid #ccc;text-align:left;width:180px;">操作</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var u in _rows)
+            {
+                <tr>
+                    <td style="padding:8px;border:1px solid #ccc;"><code>@u.SystemUriPrefix</code></td>
+                    <td style="padding:8px;border:1px solid #ccc;word-break:break-all;"><code>@u.BaseUrl</code></td>
+                    <td style="padding:8px;border:1px solid #ccc;text-align:center;">@u.TimeoutSeconds</td>
+                    <td style="padding:8px;border:1px solid #ccc;text-align:center;">@(string.IsNullOrEmpty(u.AuthorizationHeader) ? "—" : "已設定")</td>
+                    <td style="padding:8px;border:1px solid #ccc;vertical-align:middle;">
+                        @if (_deleteTarget == u.Id)
+                        {
+                            <span style="font-size:0.9rem;">確定刪除？</span>
+                            <button type="button" disabled="@_busy" @onclick="() => ConfirmDeleteAsync(u.Id)" style="padding:4px 10px;margin-left:4px;border:1px solid #c62828;background:#c62828;color:#fff;border-radius:4px;cursor:pointer;">是</button>
+                            <button type="button" disabled="@_busy" @onclick="CancelDelete" style="padding:4px 10px;margin-left:4px;border:1px solid #999;background:#f5f5f5;border-radius:4px;cursor:pointer;">否</button>
+                        }
+                        else
+                        {
+                            <button type="button" disabled="@_busy" @onclick="() => StartDelete(u.Id)" style="padding:4px 10px;border:1px solid #c62828;background:#fff;color:#c62828;border-radius:4px;cursor:pointer;">刪除</button>
+                        }
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_successMessage))
+{
+    <p style="padding:8px 12px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:4px;max-width:720px;color:#1b5e20;">@_successMessage</p>
+}
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p style="padding:8px 12px;background:#ffebee;border:1px solid #ef9a9a;border-radius:4px;max-width:720px;color:#b71c1c;">@_message</p>
+}
+
+<h3 style="margin-top:24px;">新增上游</h3>
+
+<EditForm Model="_model" OnValidSubmit="AddAsync">
+    <div style="margin-bottom:12px;max-width:560px;">
+        <label for="prefix"><strong>System URI 前綴（必填）</strong></label>
+        <InputText id="prefix" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.SystemUriPrefix" placeholder="http://loinc.org" />
+        <small style="display:block;margin-top:4px;color:#555;">
+            須與 FHIR <code>Coding.system</code> 開頭一致；LOINC 為 <code>http://loinc.org</code>，勿填「LOINC」簡稱。
+        </small>
+    </div>
+    <div style="margin-bottom:12px;max-width:560px;">
+        <label for="baseUrl"><strong>Base URL（必填）</strong></label>
+        <InputText id="baseUrl" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.BaseUrl" placeholder="https://tx.fhir.org/r4" />
+        <small style="display:block;margin-top:4px;color:#555;">
+            遠端 FHIR 服務根位址，需包含 <strong>/fhir</strong> 路徑（或您環境實際的 REST 根，例如 <code>https://host/fhir</code>）。本系統會將 <code>CodeSystem/$lookup</code> 等路徑接在此網址之後。
+        </small>
+    </div>
+    <div style="margin-bottom:12px;max-width:560px;">
+        <label for="auth"><strong>Authorization 標頭（選填）</strong></label>
+        <InputText id="auth" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.AuthorizationHeader" placeholder="Bearer …" autocomplete="off" />
+        <small style="display:block;margin-top:4px;color:#555;">
+            若上游需要 API Key 或 Bearer，整行貼上（含 <code>Bearer </code> 前綴）。儲存後列表僅顯示「已設定」，不顯示內容。
+        </small>
+    </div>
+    <div style="margin-bottom:12px;max-width:200px;">
+        <label for="timeout"><strong>逾時（秒）</strong></label>
+        <InputNumber id="timeout" style="width:120px;padding:6px 8px;margin-top:4px;display:block;box-sizing:border-box;" @bind-Value="_model.TimeoutSeconds" />
+    </div>
+    <button type="submit" disabled="@_busy" style="padding:8px 16px;background:#0d6efd;color:#fff;border:1px solid #0d6efd;border-radius:4px;cursor:pointer;">新增</button>
+</EditForm>
+
+<p style="margin-top:20px;font-size:0.9rem;color:#666;">
+    進階：亦可用 REST 維護相同資料 — <code>GET/POST/DELETE /fhir/admin/registry/upstreams</code>（詳見 <a href="/scalar/v1" target="_blank" rel="noopener noreferrer">Scalar 文件</a>）。
+</p>
+
+@code {
+    private IReadOnlyList<UpstreamServerRow>? _rows;
+    private string? _message;
+    private string? _successMessage;
+    private bool _busy;
+    private Guid? _deleteTarget;
+
+    private UpstreamFormModel _model = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _rows = await Repository.ListUpstreamsAsync(default);
+    }
+
+    private void StartDelete(Guid id)
+    {
+        _deleteTarget = id;
+        _message = null;
+        _successMessage = null;
+    }
+
+    private void CancelDelete()
+    {
+        _deleteTarget = null;
+    }
+
+    private async Task ConfirmDeleteAsync(Guid id)
+    {
+        _busy = true;
+        _message = null;
+        _successMessage = null;
+        try
+        {
+            var r = await Orchestrator.DeleteUpstreamRowAsync(id, default);
+            if (r.HttpStatus == (int)HttpStatusCode.NoContent)
+            {
+                _successMessage = "已刪除此上游設定。";
+                _deleteTarget = null;
+                await ReloadAsync();
+            }
+            else
+                _message = "刪除失敗（可能已被其他人移除）。請重新整理頁面。";
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        _busy = true;
+        _message = null;
+        _successMessage = null;
+        try
+        {
+            var prefix = _model.SystemUriPrefix.Trim();
+            var baseUrl = (_model.BaseUrl ?? "").Trim();
+            if (string.IsNullOrEmpty(prefix))
+            {
+                _message = "請填寫 System URI 前綴。";
+                return;
+            }
+            if (string.IsNullOrEmpty(baseUrl))
+            {
+                _message = "請填寫 Base URL。";
+                return;
+            }
+            if (!baseUrl.Contains("/fhir", StringComparison.OrdinalIgnoreCase))
+            {
+                _message = "Base URL 應包含路徑 /fhir（例如 https://example.org/fhir 或 https://tx.fhir.org/r4）。";
+                return;
+            }
+
+            var row = new UpstreamServerRow(Guid.Empty, prefix, baseUrl,
+                string.IsNullOrWhiteSpace(_model.AuthorizationHeader) ? null : _model.AuthorizationHeader.Trim(),
+                _model.TimeoutSeconds <= 0 ? 60 : _model.TimeoutSeconds);
+
+            await Orchestrator.AddUpstreamRowAsync(row, default);
+            _model = new UpstreamFormModel();
+            _successMessage = "已新增上游。接下來可查詢術語操作是否會轉發成功。";
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class UpstreamFormModel
+    {
+        public string SystemUriPrefix { get; set; } = "http://loinc.org";
+        public string BaseUrl { get; set; } = "";
+        public string? AuthorizationHeader { get; set; }
+        public int TimeoutSeconds { get; set; } = 60;
+    }
+}

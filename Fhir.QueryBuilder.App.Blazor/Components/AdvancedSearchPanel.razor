@@ -1,0 +1,102 @@
+@using Fhir.QueryBuilder.AdvancedSearch
+@inject MainViewModel Vm
+
+<div class="small">
+    <div class="fw-semibold mb-2">Chain parameters</div>
+    <div class="row g-2 mb-2">
+        <div class="col-md-5">
+            <input class="form-control form-control-sm" placeholder="path (e.g. patient.name)"
+                   @bind="Vm.Advanced.PendingChainPath" @bind:event="oninput" />
+        </div>
+        <div class="col-md-5">
+            <input class="form-control form-control-sm" placeholder="value"
+                   @bind="Vm.Advanced.PendingChainValue" @bind:event="oninput" />
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedChainCommand.Execute(null))">Add</button>
+        </div>
+    </div>
+    <select class="form-select form-select-sm mb-4" size="4">
+        @foreach (var c in Vm.Advanced.Chains)
+        {
+            <option>@c.Path = @c.Value</option>
+        }
+    </select>
+
+    <hr />
+
+    <div class="fw-semibold mb-2">Composite parameters</div>
+    <div class="row g-2 mb-2">
+        <div class="col-md-5">
+            <input class="form-control form-control-sm" placeholder="parameter name"
+                   @bind="Vm.Advanced.PendingCompositeName" @bind:event="oninput" />
+        </div>
+        <div class="col-md-5">
+            <input class="form-control form-control-sm" placeholder="components (comma-separated)"
+                   @bind="Vm.Advanced.PendingCompositeComponents" @bind:event="oninput" />
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedCompositeCommand.Execute(null))">Add</button>
+        </div>
+    </div>
+    <select class="form-select form-select-sm mb-4" size="4">
+        @foreach (CompositeParameter c in Vm.Advanced.Composites)
+        {
+            <option>@c.ParameterName ⇒ @c.ComponentsSummary</option>
+        }
+    </select>
+
+    <hr />
+
+    <div class="fw-semibold mb-2">_filter expressions</div>
+    <div class="input-group input-group-sm mb-2">
+        <input class="form-control" placeholder="FHIR filter expression"
+               @bind="Vm.Advanced.PendingFilterExpression" @bind:event="oninput" />
+        <button type="button" class="btn btn-outline-secondary" @onclick="@(() => Vm.TryAddAdvancedFilterCommand.Execute(null))">Add</button>
+    </div>
+    <select class="form-select form-select-sm mb-4" size="4">
+        @foreach (var f in Vm.Advanced.Filters)
+        {
+            <option>@f</option>
+        }
+    </select>
+
+    <hr />
+
+    <div class="fw-semibold mb-3">Result control (_count, _offset, _total, _summary, _elements)</div>
+    <div class="row g-2 mb-2">
+        <label class="col-sm-3 col-form-label py-0">_count</label>
+        <div class="col-sm-9">
+            <input class="form-control form-control-sm" @bind="Vm.Advanced.ResultCountText" @bind:event="oninput" />
+        </div>
+        <label class="col-sm-3 col-form-label py-0">_offset</label>
+        <div class="col-sm-9">
+            <input class="form-control form-control-sm" @bind="Vm.Advanced.ResultOffsetText" @bind:event="oninput" />
+        </div>
+        <label class="col-sm-3 col-form-label py-0">_total</label>
+        <div class="col-sm-9">
+            <select class="form-select form-select-sm" @bind="Vm.Advanced.ResultTotalMode">
+                @foreach (var m in Vm.TotalModes)
+                {
+                    <option value="@m">@m</option>
+                }
+            </select>
+        </div>
+        <label class="col-sm-3 col-form-label py-0">_summary</label>
+        <div class="col-sm-9">
+            <select class="form-select form-select-sm" @bind="Vm.Advanced.ResultSummaryMode">
+                @foreach (var m in Vm.SummaryModes)
+                {
+                    <option value="@m">@m</option>
+                }
+            </select>
+        </div>
+        <label class="col-sm-3 col-form-label pt-0">_elements</label>
+        <div class="col-sm-9">
+            <textarea class="form-control form-control-sm" rows="3" placeholder="comma-separated element names"
+                      @bind="Vm.Advanced.ResultElementsCsv"></textarea>
+        </div>
+    </div>
+
+    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="@(() => Vm.ClearAdvancedSearchCommand.Execute(null))">Clear advanced</button>
+</div>

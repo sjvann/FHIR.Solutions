@@ -1,0 +1,214 @@
+@inject MainViewModel Vm
+
+<div class="small typed-search-panel min-w-0 overflow-x-hidden">
+    <p class="fw-semibold mb-2 d-flex align-items-center flex-wrap gap-1">
+        <span>Selected:</span>
+        <span class="text-muted">@(Vm.SelectedSearchParameter?.DisplayText ?? "(none)")</span>
+        @if (Vm.HasSearchParameterDocumentation)
+        {
+            <abbr class="text-secondary small user-select-none"
+                  title="@Vm.SearchParameterDocumentation"
+                  style="cursor: help;">ⓘ</abbr>
+        }
+    </p>
+
+    @if (Vm.EditorUnsupportedVisible)
+    {
+        <p class="text-secondary">This parameter type has no typed builder yet — use Draft lines or raw FHIR syntax.</p>
+    }
+
+    @if (Vm.EditorStringVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">String</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier label"
+                   @bind="Vm.TypedSearch.StringGroupModifier" @bind:event="oninput" />
+            <input class="form-control form-control-sm" placeholder="value"
+                   @bind="Vm.TypedSearch.StringValue" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorTokenVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Token</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.TokenGroupModifier" @bind:event="oninput" />
+            <input class="form-control form-control-sm mb-2" placeholder="code only"
+                   @bind="Vm.TypedSearch.TokenCodeOnly" @bind:event="oninput" />
+            <input class="form-control form-control-sm mb-2" placeholder="system"
+                   @bind="Vm.TypedSearch.TokenSystem" @bind:event="oninput" />
+            <input class="form-control form-control-sm" placeholder="code (with system)"
+                   @bind="Vm.TypedSearch.TokenCodeWithSystem" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorUriVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Uri</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.UriGroupModifier" @bind:event="oninput" />
+            <input class="form-control form-control-sm" placeholder="uri value"
+                   @bind="Vm.TypedSearch.UriText" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorReferenceVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Reference</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.ReferenceGroupModifier" @bind:event="oninput" />
+            <div class="row g-2">
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="logical id" @bind="Vm.TypedSearch.ReferenceId" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="version" @bind="Vm.TypedSearch.ReferenceVersion" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="ResourceType" @bind="Vm.TypedSearch.ReferenceType" @bind:event="oninput" /></div>
+                <div class="col-md-6"><input class="form-control form-control-sm" placeholder="logical id (type/id)" @bind="Vm.TypedSearch.ReferenceTypeId" @bind:event="oninput" /></div>
+            </div>
+            <input class="form-control form-control-sm mt-2" placeholder="canonical URL"
+                   @bind="Vm.TypedSearch.ReferenceUrl" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorNumberVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Number</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.NumberGroupModifier" @bind:event="oninput" />
+            <select class="form-select form-select-sm mb-2" @bind="Vm.TypedSearch.NumberPrefix">
+                <option value="">prefix</option>
+                @foreach (var p in Vm.NumberSearchPrefixes)
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+            <input class="form-control form-control-sm" placeholder="value"
+                   @bind="Vm.TypedSearch.NumberValue" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorDateVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Date</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.DateGroupModifier" @bind:event="oninput" />
+            <select class="form-select form-select-sm mb-2" @bind="Vm.TypedSearch.DatePrefix">
+                <option value="">prefix</option>
+                @foreach (var p in Vm.DateSearchPrefixes)
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+            <input class="form-control form-control-sm" placeholder="value"
+                   @bind="Vm.TypedSearch.DateValue" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorQuantityVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Quantity</div>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier"
+                   @bind="Vm.TypedSearch.QuantityGroupModifier" @bind:event="oninput" />
+            <select class="form-select form-select-sm mb-2" @bind="Vm.TypedSearch.QuantityPrefix">
+                <option value="">prefix</option>
+                @foreach (var p in Vm.QuantitySearchPrefixes)
+                {
+                    <option value="@p">@p</option>
+                }
+            </select>
+            <input class="form-control form-control-sm mb-2" placeholder="decimal number"
+                   @bind="Vm.TypedSearch.QuantityNumber" @bind:event="oninput" />
+            <div class="text-secondary small mb-1">Or coded quantity:</div>
+            <input class="form-control form-control-sm mb-2" placeholder="number"
+                   @bind="Vm.TypedSearch.QuantityNscNumber" @bind:event="oninput" />
+            <input class="form-control form-control-sm mb-2" placeholder="system"
+                   @bind="Vm.TypedSearch.QuantityNscSystem" @bind:event="oninput" />
+            <input class="form-control form-control-sm" placeholder="code"
+                   @bind="Vm.TypedSearch.QuantityNscCode" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorCompositeVisible)
+    {
+        <div class="border rounded p-2 mb-3" @key="Vm.CompositePartRowsRevision">
+            <div class="fw-semibold mb-2">Composite</div>
+            @if (Vm.CompositeRichRowsVisible)
+            {
+                <p class="text-secondary small mb-2">
+                    @(Vm.CompositeMetadataLoadedFromServer
+                        ? "Parts loaded from server SearchParameter.component (TD-1)."
+                        : "Using local component blocks (best-effort types from the parameter name when metadata is missing). Each block is one component; joined with $ when adding to draft.")
+                </p>
+                @foreach (var row in Vm.TypedSearch.CompositePartRows)
+                {
+                    <div class="border rounded p-2 mb-2 bg-body-secondary bg-opacity-10">
+                        <div class="fw-semibold small mb-2">@row.Label</div>
+                        @if (row.IsTokenComponent)
+                        {
+                            <input class="form-control form-control-sm mb-2" placeholder="code only"
+                                   @bind="row.TokenCodeOnly" @bind:event="oninput" />
+                            <input class="form-control form-control-sm mb-2" placeholder="system"
+                                   @bind="row.TokenSystem" @bind:event="oninput" />
+                            <input class="form-control form-control-sm mb-2" placeholder="code (with system)"
+                                   @bind="row.TokenCodeWithSystem" @bind:event="oninput" />
+                        }
+                        else if (row.IsQuantityComponent)
+                        {
+                            <select class="form-select form-select-sm mb-2" @bind="row.QuantityPrefix">
+                                <option value="">prefix</option>
+                                @foreach (var p in Vm.QuantitySearchPrefixes)
+                                {
+                                    <option value="@p">@p</option>
+                                }
+                            </select>
+                            <input class="form-control form-control-sm mb-2" placeholder="decimal number"
+                                   @bind="row.QuantityNumber" @bind:event="oninput" />
+                            <div class="text-secondary small mb-1">Or coded quantity:</div>
+                            <input class="form-control form-control-sm mb-2" placeholder="number"
+                                   @bind="row.QuantityNscNumber" @bind:event="oninput" />
+                            <input class="form-control form-control-sm mb-2" placeholder="system"
+                                   @bind="row.QuantityNscSystem" @bind:event="oninput" />
+                            <input class="form-control form-control-sm" placeholder="code"
+                                   @bind="row.QuantityNscCode" @bind:event="oninput" />
+                        }
+                        else
+                        {
+                            <input class="form-control form-control-sm" placeholder="component value"
+                                   @bind="row.Value" @bind:event="oninput" />
+                        }
+                    </div>
+                }
+            }
+            @if (Vm.CompositeCsvFallbackVisible)
+            {
+                <p class="text-secondary small mb-2">At least two comma-separated components; joined with <code>$</code> per FHIR composite search.</p>
+                <input class="form-control form-control-sm" placeholder="component1, component2, ..."
+                       @bind="Vm.TypedSearch.CompositeComponentsCsv" @bind:event="oninput" />
+            }
+            <input class="form-control form-control-sm mt-2 mb-0" placeholder="modifier label"
+                   @bind="Vm.TypedSearch.CompositeGroupModifier" @bind:event="oninput" />
+        </div>
+    }
+
+    @if (Vm.EditorSpecialVisible)
+    {
+        <div class="border rounded p-2 mb-3">
+            <div class="fw-semibold mb-2">Special</div>
+            <p class="text-secondary small mb-2">Value format depends on this SearchParameter; see documentation above or server docs.</p>
+            <input class="form-control form-control-sm mb-2" placeholder="modifier label"
+                   @bind="Vm.TypedSearch.SpecialGroupModifier" @bind:event="oninput" />
+            <input class="form-control form-control-sm" placeholder="value"
+                   @bind="Vm.TypedSearch.SpecialValue" @bind:event="oninput" />
+        </div>
+    }
+
+    <button type="button" class="btn btn-outline-primary btn-sm"
+            disabled="@Vm.IsLoading"
+            @onclick="@(() => Vm.AddTypedSearchClauseCommand.Execute(null))">
+        Add typed clause to draft
+    </button>
+</div>

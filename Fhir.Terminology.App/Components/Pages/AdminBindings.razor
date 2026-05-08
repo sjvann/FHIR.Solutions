@@ -1,0 +1,85 @@
+@page "/admin/bindings"
+@inject TerminologyOrchestrator Orchestrator
+
+<h2>FHIR Binding 登錄</h2>
+<p>對應 StructureDefinition／元素 path 與 ValueSet canonical（含強度）。亦可用 REST：<code>GET/POST/DELETE /fhir/admin/registry/bindings</code>。</p>
+
+@if (_bundleJson is null)
+{
+    <p>載入中…</p>
+}
+else
+{
+    <pre style="background:#f6f6f6;padding:8px;overflow:auto;max-height:320px;">@_bundleJson</pre>
+}
+
+<h3>新增綁定</h3>
+<EditForm Model="_model" OnValidSubmit="AddAsync">
+    <div>
+        <label>StructureDefinition URL（選填）</label>
+        <InputText class="form-control" @bind-Value="_model.StructureDefinitionUrl" />
+    </div>
+    <div>
+        <label>元素 path（選填）</label>
+        <InputText class="form-control" @bind-Value="_model.ElementPath" />
+    </div>
+    <div>
+        <label>ValueSet canonical（必填）</label>
+        <InputText class="form-control" @bind-Value="_model.ValueSetCanonical" />
+    </div>
+    <div>
+        <label>強度 strength（必填）</label>
+        <InputText class="form-control" @bind-Value="_model.Strength" placeholder="required / extensible / preferred / example" />
+    </div>
+    <button type="submit" class="btn btn-primary" disabled="@_busy">新增</button>
+</EditForm>
+@if (!string.IsNullOrEmpty(_message))
+{
+    <p style="color:coral;">@_message</p>
+}
+
+@code {
+    private string? _bundleJson;
+    private string? _message;
+    private bool _busy;
+
+    private BindingFormModel _model = new();
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        var r = await Orchestrator.ListBindingsAsync(default);
+        _bundleJson = r.JsonBody;
+    }
+
+    private async Task AddAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var row = new BindingRegistryRow(Guid.Empty, _model.StructureDefinitionUrl, _model.ElementPath, _model.ValueSetCanonical.Trim(), _model.Strength.Trim());
+            await Orchestrator.AddBindingRowAsync(row, default);
+            _model = new BindingFormModel();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class BindingFormModel
+    {
+        public string? StructureDefinitionUrl { get; set; }
+        public string? ElementPath { get; set; }
+        public string ValueSetCanonical { get; set; } = "";
+        public string Strength { get; set; } = "required";
+    }
+}
+

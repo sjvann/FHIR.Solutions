@@ -11,6 +11,7 @@ using Fhir.QueryBuilder.QueryBuilders.FluentApi;
 using Fhir.QueryBuilder.SearchUi;
 using Fhir.Auth.TokenServer;
 using Fhir.QueryBuilder.Services.Interfaces;
+using Fhir.QueryBuilder.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +29,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ITokenServer _tokenServer;
     private readonly IClipboardTextService? _clipboardText;
     private readonly IFilePickerSaveTextService? _filePickerSave;
+    private readonly IExternalUriLauncher? _externalUriLauncher;
     private CancellationTokenSource? _cancellationTokenSource;
 
     /// <summary>WinForms UI（<see cref="SynchronizationContext"/>）。</summary>
@@ -163,7 +165,35 @@ public partial class MainViewModel : ObservableObject
     private bool _editorQuantityVisible;
 
     [ObservableProperty]
+    private bool _editorCompositeVisible;
+
+    [ObservableProperty]
+    private bool _editorSpecialVisible;
+
+    [ObservableProperty]
     private bool _editorUnsupportedVisible;
+
+    /// <summary>遞增以使 UI（Blazor）重新綁定 composite 動態列。</summary>
+    [ObservableProperty]
+    private int _compositePartRowsRevision;
+
+    /// <summary>Composite 至少有兩列元件時為 true（伺服器載入或本機後備列），顯示頁籤編輯。</summary>
+    [ObservableProperty]
+    private bool _compositeRichRowsVisible;
+
+    /// <summary>無法建立兩列以上元件時退為逗號分隔輸入（極少發生）。</summary>
+    [ObservableProperty]
+    private bool _compositeCsvFallbackVisible;
+
+    /// <summary>true：SearchParameter.component 已由伺服器解析；false：後備列／名稱啟發式。</summary>
+    [ObservableProperty]
+    private bool _compositeMetadataLoadedFromServer;
+
+    /// <summary>Composite 型別化編輯：目前選取之元件頁籤索引（Blazor／Avalonia 共用）。</summary>
+    [ObservableProperty]
+    private int _compositeEditorSelectedTabIndex;
+
+    private CancellationTokenSource? _compositeMetadataLoadCts;
 
     public ObservableCollection<string> QueryParameters { get; } = new();
     public ObservableCollection<string> ModifyingParameters { get; } = new();
@@ -182,7 +212,8 @@ public partial class MainViewModel : ObservableObject
         IOptions<QueryBuilderAppSettings> options,
         ITokenServer tokenServer,
         IClipboardTextService? clipboardText = null,
-        IFilePickerSaveTextService? filePickerSave = null)
+        IFilePickerSaveTextService? filePickerSave = null,
+        IExternalUriLauncher? externalUriLauncher = null)
     {
         _fhirQueryService = fhirQueryService;
         _validationService = validationService;
@@ -194,6 +225,7 @@ public partial class MainViewModel : ObservableObject
         _tokenServer = tokenServer;
         _clipboardText = clipboardText;
         _filePickerSave = filePickerSave;
+        _externalUriLauncher = externalUriLauncher;
 
         ServerUrl = _options.DefaultServerUrl;
         SmartClientId = _options.Smart.ClientId;
@@ -734,6 +766,19 @@ public partial class MainViewModel : ObservableObject
         if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(type))
             return;
 
+        if (type == "composite")
+        {
+            if (!SearchParameterComposition.TryBuildCompositeSuffix(TypedSearch, out var compositeSuffix))
+            {
+                StatusMessage = "Composite requires at least two comma-separated components.";
+                return;
+            }
+
+            DraftSearchParameters.Add($"{name}{compositeSuffix}");
+            StatusMessage = $"Added typed clause for {name}";
+            return;
+        }
+
         var suffix = SearchParameterComposition.ComposeSuffixForSearchParamType(type, TypedSearch);
         if (suffix == null)
         {
@@ -778,11 +823,141 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanAddSearchParameterHint() => SelectedSearchParameter != null;
 
+    /// <summary>Capability 提供的搜尋參數說明（已去 HTML，供 Typed 面板顯示）。</summary>
+    public string? SearchParameterDocumentation =>
+        SearchParameterDocumentationFormatter.ToPlain(SelectedSearchParameter?.Documentation);
+
+    /// <summary>是否有非空之 <see cref="SearchParameterDocumentation"/>。</summary>
+    public bool HasSearchParameterDocumentation => !string.IsNullOrWhiteSpace(SearchParameterDocumentation);
+
     partial void OnSelectedSearchParameterChanged(SearchParamModel? value)
     {
         AddSelectedSearchParameterHintCommand.NotifyCanExecuteChanged();
         AddTypedSearchClauseCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(SearchParameterDocumentation));
+        OnPropertyChanged(nameof(HasSearchParameterDocumentation));
         RefreshTypedEditorVisibility();
+        _ = RefreshCompositeTypedPartRowsAsync(value);
+    }
+
+    partial void OnSelectedResourceChanged(string value) =>
+        _ = RefreshCompositeTypedPartRowsAsync(SelectedSearchParameter);
+
+    private async Task RefreshCompositeTypedPartRowsAsync(SearchParamModel? model)
+    {
+        TypedSearch.CompositePartRows.Clear();
+        CompositeEditorSelectedTabIndex = 0;
+        CompositeRichRowsVisible = false;
+        CompositeCsvFallbackVisible = false;
+        CompositeMetadataLoadedFromServer = false;
+        CompositePartRowsRevision++;
+
+        if (model == null ||
+            !string.Equals(model.Type?.Trim(), "composite", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        // 同步先建立後備列並顯示區塊／頁籤，避免 await 期間僅剩 modifier 空白。
+        BuildFallbackCompositePartRows(model);
+        CompositeMetadataLoadedFromServer = false;
+        CompositeRichRowsVisible = TypedSearch.CompositePartRows.Count >= 2;
+        CompositeCsvFallbackVisible = TypedSearch.CompositePartRows.Count < 2;
+        CompositePartRowsRevision++;
+
+        var loadedFromServer = false;
+
+        if (!string.IsNullOrWhiteSpace(SelectedResource) && _fhirQueryService.IsConnected)
+        {
+            _compositeMetadataLoadCts?.Cancel();
+            _compositeMetadataLoadCts?.Dispose();
+            _compositeMetadataLoadCts = new CancellationTokenSource();
+            var ct = _compositeMetadataLoadCts.Token;
+
+            try
+            {
+                var parts = await _fhirQueryService.TryGetCompositeSearchParameterComponentsAsync(
+                    SelectedResource.Trim(),
+                    model.Name.Trim(),
+                    ct).ConfigureAwait(true);
+
+                if (parts != null && parts.Count >= 2)
+                {
+                    TypedSearch.CompositePartRows.Clear();
+                    foreach (var p in parts)
+                    {
+                        TypedSearch.CompositePartRows.Add(new CompositePartRow
+                        {
+                            Label = p.RowCaption,
+                            TypeHint = p.ResolvedParameterType ?? "",
+                            NormalizedComponentType = NormalizeCompositeParameterType(p.ResolvedParameterType),
+                            Value = ""
+                        });
+                    }
+
+                    loadedFromServer = true;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to load composite SearchParameter components");
+            }
+        }
+
+        CompositeMetadataLoadedFromServer = loadedFromServer;
+        CompositeRichRowsVisible = TypedSearch.CompositePartRows.Count >= 2;
+        CompositeCsvFallbackVisible = TypedSearch.CompositePartRows.Count < 2;
+        CompositePartRowsRevision++;
+    }
+
+    /// <summary>
+    /// 無法自伺服器載入 component 時仍建立至少兩列，並對常見 code-value-quantity 型名稱套用 token／quantity 啟發式，
+    /// 使 UI 一律以頁籤編輯、組句時以 <c>$</c> 串接。
+    /// </summary>
+    private void BuildFallbackCompositePartRows(SearchParamModel model)
+    {
+        TypedSearch.CompositePartRows.Add(new CompositePartRow
+        {
+            Label = "Component 1",
+            TypeHint = "",
+            NormalizedComponentType = "",
+            Value = ""
+        });
+        TypedSearch.CompositePartRows.Add(new CompositePartRow
+        {
+            Label = "Component 2",
+            TypeHint = "",
+            NormalizedComponentType = "",
+            Value = ""
+        });
+
+        ApplyCommonCompositeHeuristic(model.Name.Trim(), TypedSearch.CompositePartRows);
+    }
+
+    /// <summary>依搜尋參數代碼推測常見 composite（例如 component-code-value-quantity）之元件型別。</summary>
+    private static void ApplyCommonCompositeHeuristic(string searchParameterCode,
+        ObservableCollection<CompositePartRow> rows)
+    {
+        if (rows.Count < 2)
+            return;
+
+        var code = searchParameterCode.Trim().ToLowerInvariant();
+        // Observation blood pressure / vital signs style composites (names vary by server: combo-*, component-*).
+        if (code.Contains("code") && code.Contains("quantity"))
+        {
+            rows[0].NormalizedComponentType = "token";
+            rows[1].NormalizedComponentType = "quantity";
+            rows[0].Label = "Code (token)";
+            rows[1].Label = "Value (quantity)";
+        }
+    }
+
+    private static string NormalizeCompositeParameterType(string? resolvedParameterType)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedParameterType))
+            return "";
+        return resolvedParameterType.Trim().ToLowerInvariant();
     }
 
     private void RefreshTypedEditorVisibility()
@@ -796,8 +971,11 @@ public partial class MainViewModel : ObservableObject
         EditorNumberVisible = k == "number";
         EditorDateVisible = k == "date";
         EditorQuantityVisible = k == "quantity";
+        EditorCompositeVisible = k == "composite";
+        EditorSpecialVisible = k == "special";
         if (!EditorStringVisible && !EditorTokenVisible && !EditorUriVisible && !EditorReferenceVisible
-            && !EditorNumberVisible && !EditorDateVisible && !EditorQuantityVisible && !string.IsNullOrEmpty(k))
+            && !EditorNumberVisible && !EditorDateVisible && !EditorQuantityVisible
+            && !EditorCompositeVisible && !EditorSpecialVisible && !string.IsNullOrEmpty(k))
             EditorUnsupportedVisible = true;
     }
 
@@ -894,11 +1072,19 @@ public partial class MainViewModel : ObservableObject
                 {
                     QueryResult = result;
                     CanSaveResult = true;
+                    if (ShowQueryResultAsTree)
+                    {
+                        QueryResultTreeRoots.Clear();
+                        foreach (var root in JsonTreeBuilder.BuildRootsFromJsonText(QueryResult))
+                            QueryResultTreeRoots.Add(root);
+                    }
                 }
                 else
                 {
                     QueryResult = string.Empty;
                     CanSaveResult = false;
+                    if (ShowQueryResultAsTree)
+                        QueryResultTreeRoots.Clear();
                 }
             }).ConfigureAwait(false);
 
@@ -967,7 +1153,7 @@ public partial class MainViewModel : ObservableObject
         var suggested = BuildSuggestedJsonFileName();
         var path = await _filePickerSave.PickSaveFilePathAsync(suggested);
         if (path != null)
-            await File.WriteAllTextAsync(path, QueryResult);
+            await _filePickerSave.SaveTextAsync(path, QueryResult);
     }
 
     private string BuildSuggestedJsonFileName()
@@ -1073,8 +1259,14 @@ public partial class MainViewModel : ObservableObject
         TryOpenUrlInBrowser(TokenUrl);
     }
 
-    private static void TryOpenUrlInBrowser(string url)
+    private void TryOpenUrlInBrowser(string url)
     {
+        if (_externalUriLauncher != null)
+        {
+            _externalUriLauncher.OpenUri(url);
+            return;
+        }
+
         try
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });

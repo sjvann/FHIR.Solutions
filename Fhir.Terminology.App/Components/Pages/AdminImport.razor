@@ -1,0 +1,305 @@
+@page "/admin/import"
+@rendermode @(new InteractiveServerRenderMode())
+@inject TerminologyOrchestrator Orchestrator
+@implements IDisposable
+
+<style>
+    @@keyframes admin-import-indeterminate {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(320%); }
+    }
+    .admin-import-progress-track {
+        height: 10px;
+        background: #e8e8e8;
+        border-radius: 6px;
+        overflow: hidden;
+        width: 100%;
+        max-width: 920px;
+    }
+    .admin-import-progress-bar {
+        height: 100%;
+        width: 38%;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #157347, #20c997);
+        animation: admin-import-indeterminate 1.05s ease-in-out infinite;
+    }
+</style>
+
+<h2>匯入術語資源</h2>
+
+<p style="max-width:820px;line-height:1.6;">
+    將符合 FHIR R5 的 <strong>CodeSystem</strong>／<strong>ValueSet</strong>／<strong>ConceptMap</strong> 以 <strong>JSON</strong> 寫入本機 SQLite。
+    巨型詞表（完整 LOINC／SNOMED）通常改採<strong>上游委派</strong>或分批匯入；此頁適合測試資料、小型詞表與手動維護資源。
+</p>
+
+<section style="margin:16px 0;padding:12px;border:1px solid #ccc;border-radius:6px;background:#fafafa;max-width:820px;">
+    <strong>三種管道（擇一或併用）</strong>
+    <ol style="margin:8px 0 0 1.2rem;line-height:1.7;">
+        <li><strong>本頁</strong>：貼上 JSON 或選擇檔案後按「匯入」（等同 REST <code>POST</code>）。</li>
+        <li><strong>REST／Scalar</strong>：<code>POST /fhir/CodeSystem</code> 等，Body 為 <code>application/fhir+json</code> — <a href="/scalar/v1" target="_blank" rel="noopener noreferrer">開啟 Scalar 文件</a>。</li>
+        <li><strong>首次空庫</strong>：若已開啟 <code>Terminology:SeedDemoResources</code>（預設見 <code>appsettings.json</code>），啟動時會自動種入<strong>示範</strong> CodeSystem／ValueSet（僅在資料庫尚無任何術語資源時）。</li>
+    </ol>
+</section>
+
+<div style="margin:16px 0;max-width:720px;">
+    <label for="rt"><strong>資源類型（須與 JSON 內 <code>resourceType</code> 一致）</strong></label>
+    <select id="rt" style="display:block;margin-top:6px;padding:6px 10px;min-width:220px;" @bind="_resourceType">
+        <option value="CodeSystem">CodeSystem</option>
+        <option value="ValueSet">ValueSet</option>
+        <option value="ConceptMap">ConceptMap</option>
+    </select>
+</div>
+
+<div style="margin:12px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+    <button type="button" style="padding:6px 14px;border:1px solid #0d6efd;background:#0d6efd;color:#fff;border-radius:4px;cursor:pointer;" disabled="@_busy" @onclick="LoadSampleAsync">載入此類型範例</button>
+    <button type="button" style="padding:6px 14px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;" disabled="@_busy" @onclick="ClearBody">清空</button>
+    <span style="font-size:0.9rem;color:#555;">範例僅供格式參考；實務請替換為貴院的 CodeSystem／ValueSet／對照表。</span>
+</div>
+
+<label for="body"><strong>FHIR JSON</strong></label>
+<InputTextArea id="body" style="width:100%;max-width:920px;min-height:220px;margin-top:6px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:13px;box-sizing:border-box;" @bind-Value="_jsonBody" />
+
+<div style="margin:12px 0;">
+    <label style="font-weight:600;">或選擇檔案（<code>.json</code>）</label>
+    <InputFile OnChange="OnFileChosenAsync" accept=".json,application/json" disabled="@_busy" style="display:block;margin-top:6px;" />
+    @if (!string.IsNullOrEmpty(_fileLoadHint))
+    {
+        <p style="margin:8px 0 0;font-size:0.9rem;color:#2e7d32;">@_fileLoadHint</p>
+    }
+</div>
+
+<div style="margin:16px 0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+    <button type="button" style="padding:8px 20px;border:1px solid #198754;background:#198754;color:#fff;border-radius:4px;cursor:pointer;font-weight:600;" disabled="@_busy" @onclick="ImportAsync">匯入（建立）</button>
+</div>
+
+@if (_busy)
+{
+    <div role="status" aria-live="polite" aria-busy="true" style="margin:12px 0;max-width:920px;">
+        <div class="admin-import-progress-track" aria-label="匯入進行中">
+            <div class="admin-import-progress-bar"></div>
+        </div>
+        <p style="margin:8px 0 0;font-size:0.95rem;color:#444;">@(_progressMessage ?? "處理中…")</p>
+        <p style="margin:4px 0 0;font-size:0.85rem;color:#666;">大型 JSON 可能需數秒至數十秒，請勿關閉此頁。</p>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_successMessage))
+{
+    <div role="status" aria-live="polite" style="padding:14px 16px;background:#e8f5e9;border:2px solid #66bb6a;border-radius:8px;max-width:820px;color:#1b5e20;margin:12px 0;">
+        <strong style="display:block;margin-bottom:8px;font-size:1.08rem;">匯入完成</strong>
+        <span>@_successMessage</span>
+        @if (!string.IsNullOrEmpty(_successLink))
+        {
+            <span> — <a href="@_successLink">前往資源列表</a></span>
+        }
+    </div>
+}
+@if (!string.IsNullOrEmpty(_errorMessage))
+{
+    <div role="alert" aria-live="assertive" style="padding:14px 16px;background:#ffebee;border:2px solid #ef5350;border-radius:8px;max-width:820px;color:#b71c1c;margin:12px 0;white-space:pre-wrap;">@_errorMessage</div>
+}
+
+<section style="margin-top:28px;padding:12px;border-left:4px solid #0d6efd;background:#f8f9fa;max-width:820px;">
+    <strong>匯入後可試</strong>
+    <ul style="margin:8px 0 0 1rem;line-height:1.7;">
+        <li>資源列表：<a href="/admin/resources">/admin/resources</a></li>
+        <li>示範 ValueSet 展開：<code>GET /fhir/ValueSet/demo-vs-administrative-gender/$expand</code></li>
+        <li>示範 CodeSystem 查碼：<code>GET /fhir/CodeSystem/$lookup?system=http://hl7.org/fhir/administrative-gender&amp;code=male</code></li>
+    </ul>
+</section>
+
+@code {
+    private string _resourceType = "CodeSystem";
+    private string _jsonBody = "";
+    private bool _busy;
+    private string? _successMessage;
+    private string? _successLink;
+    private string? _errorMessage;
+    private string? _fileLoadHint;
+    private string? _progressMessage;
+    private CancellationTokenSource? _importCts;
+
+    private const long MaxUploadBytes = 100L * 1024 * 1024;
+
+    private static string SampleCodeSystem =>
+        """
+        {
+          "resourceType": "CodeSystem",
+          "id": "example-local-codes",
+          "url": "http://example.org/fhir/CodeSystem/local-status",
+          "version": "1.0.0",
+          "status": "active",
+          "content": "complete",
+          "concept": [
+            { "code": "active", "display": "進行中" },
+            { "code": "inactive", "display": "已停用" }
+          ]
+        }
+        """;
+
+    private static string SampleValueSet =>
+        """
+        {
+          "resourceType": "ValueSet",
+          "id": "example-local-vs",
+          "url": "http://example.org/fhir/ValueSet/local-status-active",
+          "status": "active",
+          "compose": {
+            "include": [
+              {
+                "system": "http://example.org/fhir/CodeSystem/local-status",
+                "concept": [ { "code": "active" } ]
+              }
+            ]
+          }
+        }
+        """;
+
+    private static string SampleConceptMap =>
+        """
+        {
+          "resourceType": "ConceptMap",
+          "id": "example-local-map",
+          "url": "http://example.org/fhir/ConceptMap/status-bridge",
+          "status": "active",
+          "group": [
+            {
+              "source": "http://hl7.org/fhir/administrative-gender",
+              "target": "http://hl7.org/fhir/administrative-gender",
+              "element": [
+                {
+                  "code": "male",
+                  "target": [
+                    { "code": "male", "relationship": "equivalent" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """;
+
+    private Task LoadSampleAsync()
+    {
+        _jsonBody = _resourceType switch
+        {
+            "ValueSet" => SampleValueSet,
+            "ConceptMap" => SampleConceptMap,
+            _ => SampleCodeSystem,
+        };
+        ClearMessages();
+        return Task.CompletedTask;
+    }
+
+    private void ClearBody()
+    {
+        _jsonBody = "";
+        ClearMessages();
+    }
+
+    private void ClearMessages()
+    {
+        _successMessage = null;
+        _successLink = null;
+        _errorMessage = null;
+        _fileLoadHint = null;
+    }
+
+    private async Task OnFileChosenAsync(InputFileChangeEventArgs e)
+    {
+        ClearMessages();
+        var file = e.File;
+        if (file is null)
+            return;
+
+        _busy = true;
+        _progressMessage = "正在從瀏覽器讀取檔案…";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+        try
+        {
+            if (file.Size > MaxUploadBytes)
+            {
+                _errorMessage = $"檔案過大（{file.Size:N0} bytes），上限 {MaxUploadBytes:N0} bytes。請改分批匯入或使用 REST。";
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+            using var reader = new StreamReader(stream);
+            _jsonBody = await reader.ReadToEndAsync();
+            _fileLoadHint = $"已將「{file.Name}」讀入文字方塊（{_jsonBody.Length:N0} 字元）。請確認下方內容後再按匯入。";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = "讀取檔案失敗：" + ex.Message;
+            _jsonBody = "";
+        }
+        finally
+        {
+            _busy = false;
+            _progressMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        _importCts?.Cancel();
+        _importCts?.Dispose();
+        _importCts = new CancellationTokenSource();
+        var ct = _importCts.Token;
+
+        _busy = true;
+        ClearMessages();
+        _progressMessage = "正在驗證 JSON 並寫入 SQLite…";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            var json = _jsonBody.Trim();
+            if (string.IsNullOrEmpty(json))
+            {
+                _errorMessage = "請貼上 JSON，或先選擇檔案並等待「已讀入…」綠色提示出現後再匯入。";
+                return;
+            }
+
+            _progressMessage = $"正在建立 {_resourceType}（解析與持久化）…";
+            await InvokeAsync(StateHasChanged);
+
+            var result = await Orchestrator.CreateAsync(_resourceType, json, ct);
+            if (result.HttpStatus == 201)
+            {
+                _successMessage = $"已成功建立 {_resourceType}（HTTP 201 Created）。可至資源列表確認，或繼續匯入下一筆。";
+                _successLink = "/admin/resources";
+                return;
+            }
+
+            var diag = TerminologyImportOutcome.TryGetDiagnostics(result.JsonBody);
+            _errorMessage = diag ?? $"匯入失敗（HTTP {result.HttpStatus}）。\n\n{Truncate(result.JsonBody, 4000)}";
+        }
+        catch (OperationCanceledException)
+        {
+            _errorMessage = "作業已取消。";
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+            _progressMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _importCts?.Cancel();
+        _importCts?.Dispose();
+    }
+
+    private static string Truncate(string s, int max)
+        => s.Length <= max ? s : s[..max] + "…";
+}

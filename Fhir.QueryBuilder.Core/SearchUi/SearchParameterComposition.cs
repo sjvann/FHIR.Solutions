@@ -32,28 +32,23 @@ public static class SearchParameterComposition
         return sb.ToString();
     }
 
+    /// <summary>Token 搜尋值本體（不含外層 <c>=</c>／modifier 前綴），亦用作 composite 元件片段。</summary>
+    public static string ComposeTokenValueBody(string? codeOnly, string? system, string? codeWithSystem)
+    {
+        if (!string.IsNullOrEmpty(codeOnly))
+            return codeOnly;
+        if (!string.IsNullOrEmpty(codeWithSystem) && !string.IsNullOrEmpty(system))
+            return $"{system}|{codeWithSystem}";
+        if (!string.IsNullOrEmpty(system))
+            return $"{system}|";
+        return $"|{codeWithSystem}";
+    }
+
     public static string ComposeTokenSuffix(TypedSearchDraft d)
     {
         var sb = new StringBuilder();
         sb.Append(ModifierEqualsPrefix(d.TokenGroupModifier));
-
-        if (!string.IsNullOrEmpty(d.TokenCodeOnly))
-        {
-            sb.Append(d.TokenCodeOnly);
-        }
-        else if (!string.IsNullOrEmpty(d.TokenCodeWithSystem) && !string.IsNullOrEmpty(d.TokenSystem))
-        {
-            sb.Append($"{d.TokenSystem}|{d.TokenCodeWithSystem}");
-        }
-        else if (!string.IsNullOrEmpty(d.TokenSystem))
-        {
-            sb.Append($"{d.TokenSystem}|");
-        }
-        else
-        {
-            sb.Append($"|{d.TokenCodeWithSystem}");
-        }
-
+        sb.Append(ComposeTokenValueBody(d.TokenCodeOnly, d.TokenSystem, d.TokenCodeWithSystem));
         return sb.ToString();
     }
 
@@ -104,29 +99,138 @@ public static class SearchParameterComposition
         return sb.ToString();
     }
 
-    public static string ComposeQuantitySuffix(TypedSearchDraft d)
+    /// <summary>Quantity 搜尋值本體（不含外層 modifier 前綴），亦用作 composite 元件片段。</summary>
+    public static string ComposeQuantityValueBody(string? prefix, string? number, string? nscNumber, string? nscSystem, string? nscCode)
     {
         var sb = new StringBuilder();
-        sb.Append(ModifierEqualsPrefix(d.QuantityGroupModifier));
-        if (!string.IsNullOrEmpty(d.QuantityPrefix))
-            sb.Append(d.QuantityPrefix);
-        if (!string.IsNullOrEmpty(d.QuantityNumber))
+        if (!string.IsNullOrEmpty(prefix))
+            sb.Append(prefix);
+        if (!string.IsNullOrEmpty(number))
         {
-            sb.Append(d.QuantityNumber);
+            sb.Append(number);
+            return sb.ToString();
         }
-        else if (!string.IsNullOrEmpty(d.QuantityNscNumber) && !string.IsNullOrEmpty(d.QuantityNscSystem) && !string.IsNullOrEmpty(d.QuantityNscCode))
+
+        if (!string.IsNullOrEmpty(nscNumber) && !string.IsNullOrEmpty(nscSystem) && !string.IsNullOrEmpty(nscCode))
         {
-            sb.Append($"{d.QuantityNscNumber}|{d.QuantityNscSystem}|{d.QuantityNscCode}");
+            sb.Append($"{nscNumber}|{nscSystem}|{nscCode}");
+            return sb.ToString();
         }
-        else
-        {
-            sb.Append($"{d.QuantityNscNumber}||{d.QuantityNscCode}");
-        }
+
+        // 對齊舊版 WinForms：NSC 三方缺一時仍允許「number||code」片段；若三者皆空則不再附加無意义的「||」。
+        if (!string.IsNullOrEmpty(nscNumber) || !string.IsNullOrEmpty(nscCode))
+            sb.Append($"{nscNumber}||{nscCode}");
 
         return sb.ToString();
     }
 
+    public static string ComposeQuantitySuffix(TypedSearchDraft d)
+    {
+        var sb = new StringBuilder();
+        sb.Append(ModifierEqualsPrefix(d.QuantityGroupModifier));
+        sb.Append(ComposeQuantityValueBody(
+            d.QuantityPrefix,
+            d.QuantityNumber,
+            d.QuantityNscNumber,
+            d.QuantityNscSystem,
+            d.QuantityNscCode));
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Composite：至少兩個逗號分隔元件，以 <c>$</c> 連接原始字串（不重複 per-component escape；最終 URL 由呼叫端對 value 編碼一次）。
+    /// </summary>
+    /// <returns>元件不足時為 <see langword="false"/>。</returns>
+    public static bool TryBuildCompositeSuffix(TypedSearchDraft d, out string suffix)
+    {
+        if (d.CompositePartRows.Count >= 2)
+        {
+            var segments = new List<string>();
+            foreach (var r in d.CompositePartRows)
+            {
+                if (!TryGetCompositePartSegment(r, out var seg) || string.IsNullOrEmpty(seg))
+                {
+                    suffix = string.Empty;
+                    return false;
+                }
+
+                segments.Add(seg);
+            }
+
+            suffix = ModifierEqualsPrefix(d.CompositeGroupModifier) + string.Join('$', segments);
+            return true;
+        }
+
+        var parts = d.CompositeComponentsCsv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static s => s.Trim())
+            .Where(static s => s.Length > 0)
+            .ToArray();
+
+        if (parts.Length < 2)
+        {
+            suffix = string.Empty;
+            return false;
+        }
+
+        suffix = ModifierEqualsPrefix(d.CompositeGroupModifier) + string.Join('$', parts);
+        return true;
+    }
+
+    /// <summary>供測試／UI 預覽：組出單一 composite 元件片段（不含 <c>$</c>）。</summary>
+    public static bool TryGetCompositePartSegment(CompositePartRow r, out string segment)
+    {
+        var t = r.NormalizedComponentType.Trim().ToLowerInvariant();
+
+        if (t == "token" && CompositeTokenRowHasInput(r))
+        {
+            segment = ComposeTokenValueBody(r.TokenCodeOnly, r.TokenSystem, r.TokenCodeWithSystem);
+            return !string.IsNullOrEmpty(segment);
+        }
+
+        if (t == "quantity" && CompositeQuantityRowHasInput(r))
+        {
+            segment = ComposeQuantityValueBody(
+                r.QuantityPrefix,
+                r.QuantityNumber,
+                r.QuantityNscNumber,
+                r.QuantityNscSystem,
+                r.QuantityNscCode);
+            return !string.IsNullOrEmpty(segment);
+        }
+
+        if (t.Length > 0 && t is not "token" and not "quantity")
+        {
+            segment = r.Value.Trim();
+            return segment.Length > 0;
+        }
+
+        segment = r.Value.Trim();
+        return segment.Length > 0;
+    }
+
+    private static bool CompositeTokenRowHasInput(CompositePartRow r) =>
+        !string.IsNullOrWhiteSpace(r.TokenCodeOnly)
+        || !string.IsNullOrWhiteSpace(r.TokenSystem)
+        || !string.IsNullOrWhiteSpace(r.TokenCodeWithSystem);
+
+    private static bool CompositeQuantityRowHasInput(CompositePartRow r) =>
+        !string.IsNullOrWhiteSpace(r.QuantityPrefix)
+        || !string.IsNullOrWhiteSpace(r.QuantityNumber)
+        || !string.IsNullOrWhiteSpace(r.QuantityNscNumber)
+        || !string.IsNullOrWhiteSpace(r.QuantityNscSystem)
+        || !string.IsNullOrWhiteSpace(r.QuantityNscCode);
+
+    public static string ComposeSpecialSuffix(TypedSearchDraft d)
+    {
+        var sb = new StringBuilder();
+        sb.Append(ModifierEqualsPrefix(d.SpecialGroupModifier));
+        sb.Append(d.SpecialValue);
+        return sb.ToString();
+    }
+
     /// <summary>依 Capability 回傳之 parameter type（小寫）組出值片段（含前置 <c>=</c>／modifier）。</summary>
+    /// <remarks><c>composite</c> 請改用 <see cref="TryBuildCompositeSuffix"/>（需至少兩元件）。</remarks>
     public static string? ComposeSuffixForSearchParamType(string? searchParamType, TypedSearchDraft d)
     {
         return searchParamType?.Trim().ToLowerInvariant() switch
@@ -138,6 +242,7 @@ public static class SearchParameterComposition
             "number" => ComposeNumberSuffix(d),
             "date" => ComposeDateSuffix(d),
             "quantity" => ComposeQuantitySuffix(d),
+            "special" => ComposeSpecialSuffix(d),
             _ => null
         };
     }

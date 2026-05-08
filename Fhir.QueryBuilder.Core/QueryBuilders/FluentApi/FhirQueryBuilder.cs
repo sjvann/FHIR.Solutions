@@ -236,10 +236,10 @@ namespace Fhir.QueryBuilder.QueryBuilders.FluentApi
         {
             if (!string.IsNullOrWhiteSpace(parameterName) && components.Length >= 2)
             {
-                var compositeValue = string.Join("$", components.Select(Uri.EscapeDataString));
-                var parameter = $"{parameterName}={compositeValue}";
+                var compositeRaw = string.Join("$", components);
+                var parameter = $"{parameterName}={Uri.EscapeDataString(compositeRaw)}";
                 _parameters.Add(parameter);
-                _logger.LogDebug("Added composite parameter: {ParameterName}={CompositeValue}", parameterName, compositeValue);
+                _logger.LogDebug("Added composite parameter: {ParameterName}={CompositeValue}", parameterName, compositeRaw);
             }
             return this;
         }

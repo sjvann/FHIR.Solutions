@@ -1,16 +1,36 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fhir.QueryBuilder.ViewModels"
+             xmlns:searchUi="using:Fhir.QueryBuilder.SearchUi"
              x:Class="Fhir.QueryBuilder.App.Avalonia.Views.TypedSearchTab"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             x:Name="Root">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="10" Spacing="12">
-            <TextBlock FontWeight="SemiBold"
-                       TextWrapping="Wrap">
-                <Run Text="Selected: " />
-                <Run Text="{Binding SelectedSearchParameter.DisplayText}" />
-            </TextBlock>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap">
+                    <Run Text="Selected: " />
+                    <Run Text="{Binding SelectedSearchParameter.DisplayText}" />
+                </TextBlock>
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="13"
+                           Foreground="Gray"
+                           Cursor="Hand"
+                           IsVisible="{Binding HasSearchParameterDocumentation}"
+                           Text="ⓘ"
+                           ToolTip.Placement="Bottom">
+                    <ToolTip.Tip>
+                        <Border Padding="8" MaxWidth="360">
+                            <TextBlock Text="{Binding SearchParameterDocumentation}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                    </ToolTip.Tip>
+                </TextBlock>
+            </StackPanel>
             <TextBlock Foreground="Gray"
                        FontSize="12"
                        IsVisible="{Binding EditorUnsupportedVisible}"
@@ -157,6 +177,102 @@
                              Text="{Binding TypedSearch.QuantityNscSystem}" />
                     <TextBox Watermark="code"
                              Text="{Binding TypedSearch.QuantityNscCode}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorCompositeVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Composite" />
+                    <StackPanel IsVisible="{Binding CompositeRichRowsVisible}" Spacing="8">
+                        <TextBlock FontSize="11"
+                                   Foreground="Gray"
+                                   Text="Parts from server SearchParameter.component (TD-1)."
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding CompositeMetadataLoadedFromServer}" />
+                        <TextBlock FontSize="11"
+                                   Foreground="Gray"
+                                   TextWrapping="Wrap"
+                                   IsVisible="{Binding CompositeMetadataLoadedFromServer, Converter={StaticResource InverseBool}}">
+                            Using local component editors (best-effort types from the parameter name when metadata is missing). Each block is one component; values are joined with $ when you add the typed clause.
+                        </TextBlock>
+                        <ItemsControl ItemsSource="{Binding TypedSearch.CompositePartRows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="searchUi:CompositePartRow">
+                                    <Border Margin="0,0,0,8"
+                                            Padding="10"
+                                            CornerRadius="6"
+                                            BorderThickness="1"
+                                            BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}">
+                                        <StackPanel Spacing="6">
+                                            <TextBlock FontWeight="SemiBold"
+                                                       FontSize="13"
+                                                       Text="{Binding Label}" />
+                                            <StackPanel IsVisible="{Binding IsTokenComponent}" Spacing="4">
+                                                <TextBox Watermark="code only"
+                                                         Text="{Binding TokenCodeOnly}" />
+                                                <TextBox Watermark="system"
+                                                         Text="{Binding TokenSystem}" />
+                                                <TextBox Watermark="code (with system)"
+                                                         Text="{Binding TokenCodeWithSystem}" />
+                                            </StackPanel>
+                                            <StackPanel IsVisible="{Binding IsQuantityComponent}" Spacing="4">
+                                                <ComboBox ItemsSource="{Binding #Root.((vm:MainViewModel)DataContext).QuantitySearchPrefixes}"
+                                                          SelectedItem="{Binding QuantityPrefix}"
+                                                          PlaceholderText="prefix" />
+                                                <TextBox Watermark="decimal number"
+                                                         Text="{Binding QuantityNumber}" />
+                                                <TextBlock FontSize="11"
+                                                           Foreground="Gray"
+                                                           Text="Or coded quantity:" />
+                                                <TextBox Watermark="number"
+                                                         Text="{Binding QuantityNscNumber}" />
+                                                <TextBox Watermark="system"
+                                                         Text="{Binding QuantityNscSystem}" />
+                                                <TextBox Watermark="code"
+                                                         Text="{Binding QuantityNscCode}" />
+                                            </StackPanel>
+                                            <StackPanel IsVisible="{Binding IsFallbackComponent}" Spacing="4">
+                                                <TextBox Watermark="component value"
+                                                         Text="{Binding Value}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <StackPanel IsVisible="{Binding CompositeCsvFallbackVisible}" Spacing="6">
+                        <TextBlock FontSize="11"
+                                   Foreground="Gray"
+                                   Text="At least two comma-separated components; joined with $ per FHIR composite search."
+                                   TextWrapping="Wrap" />
+                        <TextBox Watermark="component1, component2, ..."
+                                 Text="{Binding TypedSearch.CompositeComponentsCsv}" />
+                    </StackPanel>
+                    <TextBox Watermark="modifier label"
+                             Text="{Binding TypedSearch.CompositeGroupModifier}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorSpecialVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Special" />
+                    <TextBlock FontSize="11"
+                               Foreground="Gray"
+                               Text="Value format depends on this SearchParameter; see documentation above or server docs."
+                               TextWrapping="Wrap" />
+                    <TextBox Watermark="modifier label"
+                             Text="{Binding TypedSearch.SpecialGroupModifier}" />
+                    <TextBox Watermark="value"
+                             Text="{Binding TypedSearch.SpecialValue}" />
                 </StackPanel>
             </Border>
 

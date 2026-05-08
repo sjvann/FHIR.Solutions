@@ -1,7 +1,48 @@
 ﻿@inherits LayoutComponentBase
+@inject HttpClient Http
 
-<div class="page">
-    <main class="content px-3 pb-4">
+<div class="page d-flex flex-column min-vh-100">
+    <header class="border-bottom bg-body-secondary bg-opacity-50 py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span class="small text-muted mb-0">
+            本機伺服器執行中；關閉瀏覽器<strong class="text-body">不會</strong>停止程式。
+        </span>
+        <button type="button" class="btn btn-outline-danger btn-sm flex-shrink-0"
+                disabled="@_exitBusy" @onclick="ExitHostAsync">
+            結束程式（關閉後端）
+        </button>
+    </header>
+    @if (!string.IsNullOrEmpty(_exitBanner))
+    {
+        <div class="alert alert-success py-2 px-3 rounded-0 mb-0 small" role="status">@_exitBanner</div>
+    }
+    <main class="content px-3 pb-4 flex-grow-1">
         @Body
     </main>
 </div>
+
+@code {
+    private bool _exitBusy;
+    private string? _exitBanner;
+
+    private async Task ExitHostAsync()
+    {
+        _exitBusy = true;
+        _exitBanner = null;
+        try
+        {
+            using var resp = await Http.PostAsync("api/app/shutdown", null).ConfigureAwait(false);
+            if (resp.IsSuccessStatusCode)
+                _exitBanner = "後端已停止，請關閉此分頁；若安裝版仍有主控台視窗，亦可直接關閉視窗或於該視窗按 Ctrl+C。";
+            else
+                _exitBanner = $"無法停止伺服器（HTTP {(int)resp.StatusCode}）。仍請嘗試關閉主控台視窗。";
+        }
+        catch (Exception ex)
+        {
+            _exitBanner = $"呼叫停止端點失敗：{ex.Message}";
+        }
+        finally
+        {
+            _exitBusy = false;
+        }
+    }
+}

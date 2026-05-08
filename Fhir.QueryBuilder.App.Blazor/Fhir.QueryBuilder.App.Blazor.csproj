@@ -1,5 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
 
+  <Import Project="..\Fhir.QueryBuilder.Version.props" Condition="Exists('..\Fhir.QueryBuilder.Version.props')" />
+  <PropertyGroup Condition="'$(FHIRQueryBuilderVersion)' == ''">
+    <FHIRQueryBuilderVersion>1.0.0</FHIRQueryBuilderVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>$(FHIRQueryBuilderVersion)</Version>
+    <AssemblyVersion>$(FHIRQueryBuilderVersion).0</AssemblyVersion>
+    <FileVersion>$(FHIRQueryBuilderVersion).0</FileVersion>
+    <InformationalVersion>$(FHIRQueryBuilderVersion)</InformationalVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -7,6 +19,22 @@
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <RootNamespace>Fhir.QueryBuilder.App.Blazor</RootNamespace>
     <AssemblyName>Fhir.QueryBuilder.App.Blazor</AssemblyName>
+    <!-- 靜態託管（本機 Kestrel 僅提供靜態檔）必須與 _framework 內 icudt_*.dat 完全一致，否則常見 404 卡載入。
+         啟用不變文化：WASM 執行時不載入 ICU 分片，避免遺漏檔或舊快取導致之 icudt 404。文化/地區感知的動態格式會受影響。 -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Release：最佳化體積；終端使用者僅需現代瀏覽器（不需 .NET）。發佈後請 smoke test。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishTrimmed>true</PublishTrimmed>
+    <BlazorEnableCompression>true</BlazorEnableCompression>
+    <DebuggerSupport>false</DebuggerSupport>
+    <WasmStripSymbols>true</WasmStripSymbols>
+  </PropertyGroup>
+
+  <!-- 若已安裝 wasm-tools 工作負載，啟用 WASM AOT 以縮短首屏（建置較久）。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(WasmToolsWorkloadInstalled)' == 'true'">
+    <RunAOTCompilation>true</RunAOTCompilation>
   </PropertyGroup>
 
   <ItemGroup>

@@ -95,11 +95,17 @@ public static class JsonTreeBuilder
             {
                 parent.Children.Add(new JsonTreeItem { Header = $"{index}: {FormatScalar(jv)}" });
             }
-            else
+            else if (subItem is JsonObject jo)
             {
-                var subArrayNode = new JsonTreeItem { Header = index.ToString() };
-                parent.Children.Add(subArrayNode);
-                AppendChildren(subArrayNode, subItem, depthRemaining - 1);
+                var subObjNode = new JsonTreeItem { Header = index.ToString() };
+                parent.Children.Add(subObjNode);
+                AppendChildren(subObjNode, jo, depthRemaining - 1);
+            }
+            else if (subItem is JsonArray nestedArr)
+            {
+                var subArrNode = new JsonTreeItem { Header = index.ToString() };
+                parent.Children.Add(subArrNode);
+                AppendArrayChildren(subArrNode, nestedArr, depthRemaining - 1);
             }
 
             index++;

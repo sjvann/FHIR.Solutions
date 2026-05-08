@@ -4,6 +4,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d6efd" />
+    <meta name="application-name" content="FHIR Query Builder" />
     <!-- 首屏：在 app.css 載入前避免 #app 內 SVG circle 預設為黑色實心（FOUC） -->
     <style>
         #app > .loading-progress circle {
@@ -22,7 +24,15 @@
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <!-- 頁籤圖示：ICO/PNG 置前（Chrome／Edge 對 SVG favicon 支援不一，且會快取舊圖）；?v= 僅供改版後強制刷新 -->
+    <!-- ?v=dev：開發時固定字串；build_installer.py 發佈後會替成當次 Fhir.QueryBuilder.Version.props 版號 -->
+    <link rel="icon" href="favicon.ico?v=dev" sizes="48x48" />
+    <link rel="shortcut icon" href="favicon.ico?v=dev" />
+    <link rel="icon" type="image/png" href="favicon.png?v=dev" sizes="32x32" />
+    <link rel="icon" type="image/png" href="icons/icon-192.png?v=dev" sizes="192x192" />
+    <link rel="icon" href="icons/query-builder-icon.svg?v=dev" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png?v=dev" />
+    <link rel="manifest" href="site.webmanifest?v=dev" />
     <link href="Fhir.QueryBuilder.App.Blazor.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
 </head>

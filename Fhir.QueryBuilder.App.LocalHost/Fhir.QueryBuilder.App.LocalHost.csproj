@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <Import Project="..\Fhir.QueryBuilder.Version.props" Condition="Exists('..\Fhir.QueryBuilder.Version.props')" />
+  <PropertyGroup Condition="'$(FHIRQueryBuilderVersion)' == ''">
+    <FHIRQueryBuilderVersion>1.0.0</FHIRQueryBuilderVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Version>$(FHIRQueryBuilderVersion)</Version>
+    <AssemblyVersion>$(FHIRQueryBuilderVersion).0</AssemblyVersion>
+    <FileVersion>$(FHIRQueryBuilderVersion).0</FileVersion>
+    <InformationalVersion>$(FHIRQueryBuilderVersion)</InformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Fhir.QueryBuilder.App.LocalHost</RootNamespace>
+    <!-- 安裝後捷徑與安裝程式顯示之友善檔名 -->
+    <AssemblyName>FHIRQueryBuilder</AssemblyName>
+    <!-- 內嵌至 exe：Windows「設定 › 已安裝的應用程式」與 UninstallDisplayIcon 依此顯示圖示 -->
+    <ApplicationIcon>..\Fhir.QueryBuilder.App.Blazor\wwwroot\favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

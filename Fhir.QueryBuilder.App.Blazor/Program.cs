@@ -33,7 +33,10 @@ builder.Services.Configure<QueryBuilderAppSettings>(
 builder.Services.Configure<TokenServerOptions>(
     builder.Configuration.GetSection(QueryBuilderAppSettings.SectionName).GetSection("Smart"));
 
-builder.Services.AddSingleton(_ => new HttpClient());
+builder.Services.AddSingleton(_ => new HttpClient
+{
+    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress),
+});
 
 builder.Services.AddFhirQueryBuilderR5();
 builder.Services.AddSingleton<Func<IFhirQueryBuilder>>(sp => () => sp.GetRequiredService<IFhirQueryBuilder>());

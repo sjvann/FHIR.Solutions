@@ -1,0 +1,23 @@
+---
+description: C# / .NET 專案風格 — 與 Fhir.TypeFramework、ResourceCreator 既有寫法對齊
+globs: "**/*.cs,**/*.csproj,**/*.slnx"
+alwaysApply: false
+---
+
+# C# 與專案慣例
+
+## 專案設定
+
+- **預設** Target Framework：**`net10.0`**（見 `tech-stack.mdc` / `AGENTS.md`）。`Fhir.ResourceCreator` 暫為 `net8.0-windows…` 例外；除非任務要求對齊，否則勿單方面改動。
+- 新增或修改其他專案時沿用既有：`ImplicitUsings`、`Nullable`、TF 與**同類專案**一致（勿私自降版／升版除非任務要求）。
+- NuGet 套件版本與鄰近專案對齊；新增相依須有明確理由。
+
+## 程式風格
+
+- 命名、資料夾結構、`using` 順序比照**同一專案內最近修改的同類檔案**。
+- 新增公開型別時：有意義的命名、避免無謂的 `try/catch` 包裝、避免為顯而易見程式碼寫長篇註解。
+- 延伸現有類別與工具方法，避免複製一整段相似邏輯。
+
+## 與 FHIR 型別相關
+
+- 強型別與 JSON 屬性名稱遵循 FHIR 元素名；繼承與組合沿用 `Fhir.TypeFramework` 既有基底（如 `Resource`、`DomainResource`）與命名空間習慣。

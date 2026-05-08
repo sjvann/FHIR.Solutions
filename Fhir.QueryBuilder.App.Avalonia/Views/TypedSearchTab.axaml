@@ -1,0 +1,168 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fhir.QueryBuilder.ViewModels"
+             x:Class="Fhir.QueryBuilder.App.Avalonia.Views.TypedSearchTab"
+             x:DataType="vm:MainViewModel">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="10" Spacing="12">
+            <TextBlock FontWeight="SemiBold"
+                       TextWrapping="Wrap">
+                <Run Text="Selected: " />
+                <Run Text="{Binding SelectedSearchParameter.DisplayText}" />
+            </TextBlock>
+            <TextBlock Foreground="Gray"
+                       FontSize="12"
+                       IsVisible="{Binding EditorUnsupportedVisible}"
+                       Text="This parameter type has no typed builder yet — use Draft lines or raw FHIR syntax." />
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorStringVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="String" />
+                    <TextBox Watermark="modifier label (empty = default, or exact, contains, missing, text)"
+                             Text="{Binding TypedSearch.StringGroupModifier}" />
+                    <TextBox Watermark="value"
+                             Text="{Binding TypedSearch.StringValue}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorTokenVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Token" />
+                    <TextBox Watermark="modifier (text, of-type, not-in, not, missing, in, below, above…)"
+                             Text="{Binding TypedSearch.TokenGroupModifier}" />
+                    <TextBox Watermark="code only"
+                             Text="{Binding TypedSearch.TokenCodeOnly}" />
+                    <TextBox Watermark="system"
+                             Text="{Binding TypedSearch.TokenSystem}" />
+                    <TextBox Watermark="code (with system)"
+                             Text="{Binding TypedSearch.TokenCodeWithSystem}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorUriVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Uri" />
+                    <TextBox Watermark="modifier (missing, contains, below, above)"
+                             Text="{Binding TypedSearch.UriGroupModifier}" />
+                    <TextBox Watermark="uri value"
+                             Text="{Binding TypedSearch.UriText}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorReferenceVisible}">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                               FontWeight="SemiBold"
+                               Text="Reference" />
+                    <TextBox Grid.Row="1"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="2"
+                             Watermark="modifier (text, not-in, missing, identifier, below, above)"
+                             Text="{Binding TypedSearch.ReferenceGroupModifier}" />
+                    <TextBox Grid.Row="2"
+                             Grid.Column="0"
+                             Watermark="logical id"
+                             Text="{Binding TypedSearch.ReferenceId}" />
+                    <TextBox Grid.Row="2"
+                             Grid.Column="1"
+                             Watermark="version"
+                             Text="{Binding TypedSearch.ReferenceVersion}" />
+                    <TextBox Grid.Row="3"
+                             Grid.Column="0"
+                             Watermark="ResourceType"
+                             Text="{Binding TypedSearch.ReferenceType}" />
+                    <TextBox Grid.Row="3"
+                             Grid.Column="1"
+                             Watermark="logical id (type/id)"
+                             Text="{Binding TypedSearch.ReferenceTypeId}" />
+                    <TextBox Grid.Row="4"
+                             Grid.Column="0"
+                             Grid.ColumnSpan="2"
+                             Watermark="canonical URL"
+                             Text="{Binding TypedSearch.ReferenceUrl}" />
+                </Grid>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorNumberVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Number" />
+                    <TextBox Watermark="modifier (missing)"
+                             Text="{Binding TypedSearch.NumberGroupModifier}" />
+                    <ComboBox ItemsSource="{Binding NumberSearchPrefixes}"
+                              SelectedItem="{Binding TypedSearch.NumberPrefix}"
+                              PlaceholderText="prefix" />
+                    <TextBox Watermark="value"
+                             Text="{Binding TypedSearch.NumberValue}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorDateVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Date" />
+                    <TextBox Watermark="modifier (missing)"
+                             Text="{Binding TypedSearch.DateGroupModifier}" />
+                    <ComboBox ItemsSource="{Binding DateSearchPrefixes}"
+                              SelectedItem="{Binding TypedSearch.DatePrefix}"
+                              PlaceholderText="prefix" />
+                    <TextBox Watermark="value (e.g. 2020-01-01 or yyyy-mm)"
+                             Text="{Binding TypedSearch.DateValue}" />
+                </StackPanel>
+            </Border>
+
+            <Border Padding="8"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+                    IsVisible="{Binding EditorQuantityVisible}">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Quantity" />
+                    <TextBox Watermark="modifier (missing)"
+                             Text="{Binding TypedSearch.QuantityGroupModifier}" />
+                    <ComboBox ItemsSource="{Binding QuantitySearchPrefixes}"
+                              SelectedItem="{Binding TypedSearch.QuantityPrefix}"
+                              PlaceholderText="prefix" />
+                    <TextBox Watermark="decimal number"
+                             Text="{Binding TypedSearch.QuantityNumber}" />
+                    <TextBlock FontSize="11"
+                               Foreground="Gray"
+                               Text="Or coded quantity:" />
+                    <TextBox Watermark="number"
+                             Text="{Binding TypedSearch.QuantityNscNumber}" />
+                    <TextBox Watermark="system"
+                             Text="{Binding TypedSearch.QuantityNscSystem}" />
+                    <TextBox Watermark="code"
+                             Text="{Binding TypedSearch.QuantityNscCode}" />
+                </StackPanel>
+            </Border>
+
+            <Button HorizontalAlignment="Left"
+                    Content="Add typed clause to draft"
+                    Command="{Binding AddTypedSearchClauseCommand}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,827 @@
+<Window xmlns="https://github.com/avaloniaui"
+
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+
+        xmlns:vm="using:Fhir.QueryBuilder.ViewModels"
+
+        xmlns:models="using:Fhir.QueryBuilder.Models"
+
+        xmlns:v="using:Fhir.QueryBuilder.App.Avalonia.Views"
+
+        xmlns:searchUi="using:Fhir.QueryBuilder.SearchUi"
+
+        x:Class="Fhir.QueryBuilder.App.Avalonia.MainWindow"
+
+        x:DataType="vm:MainViewModel"
+
+        Title="FHIR Query Builder"
+
+        Width="1180"
+
+        Height="820"
+
+        MinWidth="920"
+
+        MinHeight="680"
+
+        FontFamily="Segoe UI, Inter, ui-sans-serif, system-ui">
+
+    <Window.Styles>
+
+        <Style Selector="TextBlock.sectionTitle">
+
+            <Setter Property="FontSize" Value="13" />
+
+            <Setter Property="FontWeight" Value="SemiBold" />
+
+            <Setter Property="VerticalAlignment" Value="Center" />
+
+        </Style>
+
+        <Style Selector="Border.card">
+
+            <Setter Property="Padding" Value="14" />
+
+            <Setter Property="CornerRadius" Value="10" />
+
+            <Setter Property="BorderThickness" Value="1" />
+
+            <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+
+        </Style>
+
+        <Style Selector="Border.block">
+
+            <Setter Property="Padding" Value="10" />
+
+            <Setter Property="CornerRadius" Value="8" />
+
+            <Setter Property="BorderThickness" Value="1" />
+
+            <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+
+            <Setter Property="ClipToBounds" Value="True" />
+
+        </Style>
+
+        <Style Selector="TabControl.queryTabs TabItem">
+
+            <Setter Property="FontSize" Value="12.5" />
+
+            <Setter Property="Padding" Value="12,7,12,7" />
+
+            <Setter Property="Margin" Value="0,0,8,0" />
+
+        </Style>
+
+        <Style Selector="TabControl.queryTabs TabItem:selected">
+
+            <Setter Property="FontWeight" Value="SemiBold" />
+
+            <Setter Property="Opacity" Value="1" />
+
+        </Style>
+
+        <Style Selector="TabControl.queryTabs TabItem:not(:selected)">
+
+            <Setter Property="Opacity" Value="0.78" />
+
+        </Style>
+
+        <Style Selector="TabControl.queryTabs">
+
+            <Setter Property="Padding" Value="0,2,0,0" />
+
+        </Style>
+
+    </Window.Styles>
+
+
+
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <Border Grid.Row="0" Classes="card">
+
+            <StackPanel Spacing="10">
+
+                <Grid ColumnDefinitions="2*,Auto,Auto,*">
+
+                    <TextBox Grid.Column="0"
+
+                             Watermark="FHIR base URL"
+
+                             Text="{Binding ServerUrl}"
+
+                             VerticalAlignment="Center"
+
+                             MinHeight="34" />
+
+                    <Button Grid.Column="1"
+
+                            Margin="12,0,0,0"
+
+                            Content="Connect"
+
+                            Classes="accent"
+
+                            Command="{Binding ConnectToServerCommand}"
+
+                            IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                    <Button Grid.Column="2"
+
+                            Margin="8,0,0,0"
+
+                            Content="Cancel"
+
+                            Command="{Binding CancelOperationCommand}"
+
+                            IsEnabled="{Binding IsLoading}" />
+
+                    <Grid Grid.Column="3"
+
+                          Margin="16,0,0,0"
+
+                          ColumnDefinitions="Auto,*"
+
+                          MinWidth="180">
+
+                        <TextBlock Grid.Column="0"
+
+                                   Classes="sectionTitle"
+
+                                   Text="Resource type"
+
+                                   VerticalAlignment="Center"
+
+                                   Margin="0,0,10,0" />
+
+                        <AutoCompleteBox Grid.Column="1"
+
+                                         MinHeight="34"
+
+                                         HorizontalAlignment="Stretch"
+
+                                         VerticalAlignment="Center"
+
+                                         Watermark="選擇或輸入類型"
+
+                                         ItemsSource="{Binding SupportedResources}"
+
+                                         SelectedItem="{Binding SelectedResource, Mode=TwoWay}"
+
+                                         FilterMode="StartsWith"
+
+                                         MinimumPrefixLength="1"
+
+                                         SelectionChanged="ResourceAutoComplete_OnSelectionChanged"
+
+                                         LostFocus="ResourceAutoComplete_OnLostFocus" />
+
+                    </Grid>
+
+                </Grid>
+
+                <TextBox Watermark="Bearer access token（選填，Execute query 時附加 Authorization）"
+
+                         Text="{Binding BearerAccessToken}"
+
+                         PasswordChar="*"
+
+                         MinHeight="34" />
+
+                <StackPanel IsVisible="{Binding SupportOAuth}" Orientation="Vertical" Spacing="8">
+
+                    <TextBlock FontSize="12"
+
+                               FontWeight="SemiBold"
+
+                               Opacity="0.9"
+
+                               TextWrapping="Wrap"
+
+                               Text="SMART on FHIR（well-known 已取得 authorize／token 端點）" />
+
+                    <Grid ColumnDefinitions="Auto,*">
+
+                        <TextBlock Grid.Column="0"
+
+                                   Margin="0,0,8,0"
+
+                                   VerticalAlignment="Center"
+
+                                   Text="Client ID" />
+
+                        <TextBox Grid.Column="1"
+
+                                 Watermark="在 IdP 註冊的 client_id"
+
+                                 Text="{Binding SmartClientId}"
+
+                                 MinHeight="34" />
+
+                    </Grid>
+
+                    <TextBox Watermark="Scopes（例：launch/patient patient/*.read openid fhirUser offline_access）"
+
+                             Text="{Binding SmartScopes}"
+
+                             AcceptsReturn="True"
+
+                             TextWrapping="Wrap"
+
+                             MinHeight="48" />
+
+                    <TextBox Watermark="機密客戶端：RSA/EC 私鑰 PEM（選填；亦可改 appsettings ConfidentialPrivateKeyPem）"
+
+                             Text="{Binding SmartPrivateKeyPem}"
+
+                             AcceptsReturn="True"
+
+                             TextWrapping="Wrap"
+
+                             FontFamily="Consolas,Courier New,monospace"
+
+                             MinHeight="72" />
+
+                    <TextBlock FontSize="11"
+
+                               Opacity="0.75"
+
+                               TextWrapping="Wrap"
+
+                               Text="{Binding SmartPatientSummary}" />
+
+                    <WrapPanel Orientation="Horizontal">
+
+                        <Button Margin="0,0,8,8"
+
+                                Content="SMART 登入（瀏覽器 PKCE）"
+
+                                Command="{Binding RunSmartBrowserLoginCommand}"
+
+                                IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                        <Button Margin="0,0,8,8"
+
+                                Content="刷新 access token"
+
+                                Command="{Binding RefreshSmartTokenCommand}"
+
+                                IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                        <Button Margin="0,0,8,8"
+
+                                Content="JWT client_credentials"
+
+                                Command="{Binding RunSmartClientCredentialsJwtCommand}"
+
+                                IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                        <Button Margin="0,0,8,8"
+
+                                Content="清除 SMART session"
+
+                                Command="{Binding ClearSmartSessionCommand}"
+
+                                IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                        <Button Margin="0,0,8,8" Content="Open authorize URL" Command="{Binding OpenAuthorizeUrlCommand}" />
+
+                        <Button Margin="0,0,8,8" Content="Open token URL" Command="{Binding OpenTokenUrlCommand}" />
+
+                        <Button Margin="0,0,8,8" Content="Copy token URL" Command="{Binding CopyTokenUrlCommand}" />
+
+                    </WrapPanel>
+
+                    <TextBlock FontSize="10"
+
+                               Opacity="0.65"
+
+                               TextWrapping="Wrap"
+
+                               Text="{Binding TokenUrl}" />
+
+                </StackPanel>
+
+            </StackPanel>
+
+        </Border>
+
+
+
+        <Border Grid.Row="1"
+
+                Margin="0,8,0,0"
+
+                Classes="card"
+
+                IsVisible="{Binding HasValidationErrors}">
+
+            <Grid ColumnDefinitions="*,Auto">
+
+                <ItemsControl Grid.Column="0" ItemsSource="{Binding ValidationErrors}">
+
+                    <ItemsControl.ItemTemplate>
+
+                        <DataTemplate>
+
+                            <TextBlock Margin="0,2"
+
+                                       Foreground="#c05000"
+
+                                       TextWrapping="Wrap"
+
+                                       Text="{Binding}" />
+
+                        </DataTemplate>
+
+                    </ItemsControl.ItemTemplate>
+
+                </ItemsControl>
+
+                <Button Grid.Column="1"
+
+                        Margin="12,0,0,0"
+
+                        VerticalAlignment="Top"
+
+                        Content="Clear"
+
+                        Command="{Binding ClearValidationErrorsCommand}" />
+
+            </Grid>
+
+        </Border>
+
+
+
+        <Border Grid.Row="2"
+
+                Margin="0,2,0,0"
+
+                Padding="8"
+
+                Classes="card">
+
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+
+                <TextBox Grid.Column="0"
+
+                         Watermark="Full query URL (built below)"
+
+                         Text="{Binding QueryUrl}"
+
+                         MinHeight="38"
+
+                         VerticalAlignment="Center" />
+
+                <Button Grid.Column="1"
+
+                        Margin="12,0,0,0"
+
+                        VerticalAlignment="Center"
+
+                        Content="Build composed URL"
+
+                        Command="{Binding BuildComposedQueryCommand}"
+
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                <Button Grid.Column="2"
+
+                        Margin="8,0,0,0"
+
+                        VerticalAlignment="Center"
+
+                        Classes="accent"
+
+                        Content="Execute query"
+
+                        Command="{Binding ExecuteQueryCommand}"
+
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                <Button Grid.Column="3"
+
+                        Margin="8,0,0,0"
+
+                        VerticalAlignment="Center"
+
+                        Content="Clear URL"
+
+                        Command="{Binding ClearQueryUrlFieldCommand}"
+
+                        IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+            </Grid>
+
+        </Border>
+
+
+
+        <Grid Grid.Row="3"
+
+              Margin="0,2,0,0"
+
+              ColumnDefinitions="1.65*,1*,1.65*">
+
+            <Border Grid.Column="0"
+
+                    Margin="0,0,4,0"
+
+                    Classes="card"
+
+                    MinWidth="240">
+
+                <TabControl Classes="queryTabs"
+
+                            MinHeight="360">
+
+                    <TabItem Header="Search parameters">
+
+                        <Grid Margin="8">
+
+                            <Border Classes="block"
+
+                                    MinHeight="220">
+
+                                <Grid ColumnDefinitions="*,*"
+
+                                      RowDefinitions="*">
+
+                                    <Border Grid.Column="0"
+
+                                            Classes="block"
+
+                                            Padding="8">
+
+                                        <DockPanel LastChildFill="True">
+
+                                            <TextBlock DockPanel.Dock="Top"
+
+                                                       Margin="0,0,0,8"
+
+                                                       Text="Capability search params"
+
+                                                       FontWeight="SemiBold" />
+
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+
+                                                          HorizontalScrollBarVisibility="Disabled">
+
+                                                <ListBox ItemsSource="{Binding SearchParameters}"
+
+                                                         SelectedItem="{Binding SelectedSearchParameter}">
+
+                                                    <ListBox.ItemTemplate>
+
+                                                        <DataTemplate DataType="models:SearchParamModel">
+
+                                                            <TextBlock Text="{Binding DisplayText}" />
+
+                                                        </DataTemplate>
+
+                                                    </ListBox.ItemTemplate>
+
+                                                </ListBox>
+
+                                            </ScrollViewer>
+
+                                        </DockPanel>
+
+                                    </Border>
+
+                                    <Border Grid.Column="1"
+
+                                            Margin="12,0,0,0"
+
+                                            Classes="block"
+
+                                            Padding="8">
+
+                                        <Grid RowDefinitions="Auto,*">
+
+                                            <TextBlock Grid.Row="0"
+
+                                                       Margin="0,0,0,8"
+
+                                                       Text="Typed builder"
+
+                                                       FontWeight="SemiBold"
+
+                                                       TextWrapping="Wrap" />
+
+                                            <v:TypedSearchTab Grid.Row="1" />
+
+                                        </Grid>
+
+                                    </Border>
+
+                                </Grid>
+
+                            </Border>
+
+                        </Grid>
+
+                    </TabItem>
+
+                    <TabItem Header="Advanced">
+
+                        <v:AdvancedSearchTab />
+
+                    </TabItem>
+
+                    <TabItem Header="Modifying results">
+
+                        <v:ModifyingSearchTab />
+
+                    </TabItem>
+
+                </TabControl>
+
+            </Border>
+
+            <Border Grid.Column="1"
+
+                    Margin="0,0,4,0"
+
+                    Classes="card"
+
+                    MinWidth="154">
+
+                <Grid RowDefinitions="*,*">
+
+                    <DockPanel Grid.Row="0">
+
+                        <TextBlock DockPanel.Dock="Top"
+
+                                   Text="Draft query lines"
+
+                                   FontWeight="SemiBold"
+
+                                   Margin="0,0,0,6" />
+
+                        <StackPanel DockPanel.Dock="Bottom"
+
+                                    Orientation="Horizontal"
+
+                                    Spacing="8"
+
+                                    Margin="0,8,0,0">
+
+                            <Button Content="Remove selected"
+
+                                    Command="{Binding RemoveSelectedDraftFromListCommand}" />
+
+                            <Button Content="Clear all"
+
+                                    Command="{Binding ClearAllDraftSearchParametersCommand}" />
+
+                        </StackPanel>
+
+                        <ListBox MinHeight="72"
+
+                                 ItemsSource="{Binding DraftSearchParameters}"
+
+                                 SelectedItem="{Binding SelectedDraftParameter}" />
+
+                    </DockPanel>
+
+                    <TabControl Grid.Row="1"
+
+                                Margin="0,6,0,0"
+
+                                Classes="queryTabs"
+
+                                MinHeight="140">
+
+                        <TabItem Header="_include">
+
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+
+                                          VerticalScrollBarVisibility="Auto">
+
+                                <StackPanel Margin="8"
+
+                                            Spacing="10">
+
+                                    <CheckBox Content="Emit every listed path (same as WinForms “include all”)"
+
+                                              IsChecked="{Binding IncludeTakeAll}" />
+
+                                    <ItemsControl ItemsSource="{Binding IncludeChoices}">
+
+                                        <ItemsControl.ItemTemplate>
+
+                                            <DataTemplate DataType="models:SelectableIncludeRow">
+
+                                                <CheckBox Margin="0,3"
+
+                                                          Content="{Binding Value}"
+
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+
+                                            </DataTemplate>
+
+                                        </ItemsControl.ItemTemplate>
+
+                                    </ItemsControl>
+
+                                </StackPanel>
+
+                            </ScrollViewer>
+
+                        </TabItem>
+
+                        <TabItem Header="_revinclude">
+
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+
+                                          VerticalScrollBarVisibility="Auto">
+
+                                <StackPanel Margin="8"
+
+                                            Spacing="10">
+
+                                    <CheckBox Content="Emit every listed path"
+
+                                              IsChecked="{Binding RevIncludeTakeAll}" />
+
+                                    <ItemsControl ItemsSource="{Binding RevIncludeChoices}">
+
+                                        <ItemsControl.ItemTemplate>
+
+                                            <DataTemplate DataType="models:SelectableIncludeRow">
+
+                                                <CheckBox Margin="0,3"
+
+                                                          Content="{Binding Value}"
+
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+
+                                            </DataTemplate>
+
+                                        </ItemsControl.ItemTemplate>
+
+                                    </ItemsControl>
+
+                                </StackPanel>
+
+                            </ScrollViewer>
+
+                        </TabItem>
+
+                    </TabControl>
+
+                </Grid>
+
+            </Border>
+
+            <Border Grid.Column="2"
+
+                    Margin="4,0,0,0"
+
+                    Classes="card"
+
+                    MinWidth="240">
+
+                <Grid RowDefinitions="*,Auto">
+
+                    <Border Grid.Row="0"
+
+                            Padding="4"
+
+                            CornerRadius="6"
+
+                            BorderThickness="1"
+
+                            BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+
+                            MinHeight="280">
+
+                        <Grid>
+
+                            <TreeView VerticalAlignment="Stretch"
+
+                                      MinHeight="240"
+
+                                      IsVisible="{Binding ShowQueryResultAsTree}"
+
+                                      ItemsSource="{Binding QueryResultTreeRoots}">
+
+                                <TreeView.ItemTemplate>
+
+                                    <TreeDataTemplate DataType="searchUi:JsonTreeItem"
+
+                                                      ItemsSource="{Binding Children}">
+
+                                        <TextBlock Text="{Binding Header}" />
+
+                                    </TreeDataTemplate>
+
+                                </TreeView.ItemTemplate>
+
+                            </TreeView>
+
+                            <TextBox AcceptsReturn="True"
+
+                                     TextWrapping="Wrap"
+
+                                     Watermark="JSON"
+
+                                     Text="{Binding QueryResult}"
+
+                                     VerticalAlignment="Stretch"
+
+                                     VerticalContentAlignment="Top"
+
+                                     FontFamily="Consolas,Courier New,monospace"
+
+                                     IsVisible="{Binding ShowQueryResultAsTree, Converter={StaticResource InverseBool}}" />
+
+                        </Grid>
+
+                    </Border>
+
+
+
+                    <DockPanel Grid.Row="1"
+
+                               Margin="0,6,0,0"
+
+                               LastChildFill="False">
+
+                        <Button DockPanel.Dock="Right"
+
+                                Margin="12,0,0,0"
+
+                                Content="Exit"
+
+                                Click="Exit_OnClick" />
+
+                        <WrapPanel Orientation="Horizontal">
+
+                            <Button Margin="0,0,8,8"
+
+                                    Content="Copy"
+
+                                    Command="{Binding CopyQueryResultCommand}"
+
+                                    IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                            <Button Margin="0,0,8,8"
+
+                                    Content="Save…"
+
+                                    Command="{Binding SaveQueryResultCommand}"
+
+                                    IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                            <Button Margin="0,0,8,8"
+
+                                    Content="Clear"
+
+                                    Command="{Binding ClearQueryResultFieldCommand}"
+
+                                    IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                            <Button Margin="0,0,8,8"
+
+                                    Content="{Binding ResultViewToggleLabel}"
+
+                                    Command="{Binding ToggleQueryResultTreeCommand}"
+
+                                    IsEnabled="{Binding IsLoading, Converter={StaticResource InverseBool}}" />
+
+                        </WrapPanel>
+
+                    </DockPanel>
+
+                </Grid>
+
+            </Border>
+
+        </Grid>
+
+
+
+        <TextBlock Grid.Row="4"
+
+                   Margin="0,4,0,0"
+
+                   Text="{Binding StatusMessage}"
+
+                   TextWrapping="Wrap"
+
+                   FontSize="11"
+
+                   LineHeight="16"
+
+                   Opacity="0.85" />
+
+    </Grid>
+
+</Window>
+
+

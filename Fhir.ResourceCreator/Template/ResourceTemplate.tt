@@ -1,0 +1,61 @@
+﻿<#@ template language="C#" #>
+
+
+using Core.Extension;
+using DataTypeService.Complex;
+using DataTypeService.Special;
+using ResourceTypeBased;
+using System.Text.Json.Nodes;
+using DataTypeService.Meta;
+using Primitive = DataTypeService.Primitive;
+<# if(_hasChoice) { #>
+using ResourceTypeServices.R5.<#=_namespaceSub#>.Choice;
+<#}#>
+
+namespace ResourceTypeServices.R5.<#= _namespaceSub #>
+{
+    public class <#= _className#> :DomainResource
+    {
+        #region Property
+        <#=  _properties#>
+        #endregion
+        #region Constructor
+        public  <#= _className#>() { }
+
+        public  <#= _className#>(string value) : this(value.Parse()) { }
+        public  <#= _className#>(JsonNode source)
+        {
+            _JsonNode = source;
+            if (source != null)
+            {
+                SetDomainResource(source);
+                var values = source.AsObject().GetEnumerator();
+                while (values.MoveNext())
+                {
+                    var ck = values.Current.Key;
+                    var cv = values.Current.Value;
+                    switch (ck)
+                    {
+                        <#= _constructor  #>
+                    }
+                }
+            }
+        }
+        #endregion
+        #region From Parent
+        protected override string _TypeName => "<#= _className #>";
+        #endregion
+
+        #region Private Method
+
+        public override void SetupProperties()
+        {
+            List<KeyValuePair<string, JsonNode>> result = new();
+            result.AddRange(GetDomainResource());
+           <#= _setup  #>
+            _Properties = result;
+        }
+
+        #endregion
+    }
+}

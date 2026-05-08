@@ -1,0 +1,27 @@
+---
+description: FHIR SDK — TypeFramework 單一套件、Registry 產線與多版本資源專案邊界
+globs: "**/Fhir.TypeFramework/**,**/Fhir.ResourceCreator/**"
+alwaysApply: false
+---
+
+# FHIR Solutions 架構規則
+
+## Fhir.TypeFramework
+
+- **只維護單一** `Fhir.TypeFramework` NuGet：Primitive 層對齊 Normative、預期長期穩定與向下相容；**不要**依 FHIR R4/R5 拆成多個 TypeFramework 套件。
+- 複合型別或資源基底不足時，優先在**同一** TypeFramework 內擴充，而非另開平行套件。
+
+## Fhir.ResourceCreator（產生器）
+
+- 定義來源主線為 **FHIR Package Registry**（`packages.fhir.org`，備援 `packages2.fhir.org`）：下載 NPM 風格套件、解析 **StructureDefinition**（優先 `snapshot.element`），而非依賴本機 Excel 作為唯一輸入。
+- **每一組** `package-id` + `version` 對應**獨立**產出專案／NuGet；設定檔驅動套件清單、Registry URL、命名空間與輸出路徑。
+- 產生的資源組件皆 **`PackageReference` 同一條** `Fhir.TypeFramework`（版本依發行策略鎖定）；R4/R5 差異由**產生器與 SD**，不由重複的 Primitive 框架承擔。
+
+## 產出物
+
+- 產生程式碼的命名空間、基底類別與資料型別引用須**對齊** `Fhir.TypeFramework`，勿沿用舊版如 `DataTypeService.*` / `ResourceTypeServices.R5` 等已淘汰前綴。
+
+## 命名（避免與「共用基礎」混淆）
+
+- 產生的資源組件名稱／根命名空間建議採 **FHIR 線別**（例如 `Fhir.Resources.R5`），**不要**使用後綴 `Core`：在 .NET 生態中 `Core` 常讀成「多版本共用的基礎層」，而此處每個產出專案只對應**一個** Registry 套件版本；真正跨 R4/R5 共用者僅 **`Fhir.TypeFramework`**。
+- 未設定 `OutputProjectName` 時，可自 `PackageId` 推斷（如 `hl7.fhir.r5.core` → `Fhir.Resources.R5`）。見 `GeneratedResourceNaming`。

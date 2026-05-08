@@ -1,0 +1,12 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="using:Fhir.QueryBuilder.App.Avalonia.Converters"
+             x:Class="Fhir.QueryBuilder.App.Avalonia.App"
+             RequestedThemeVariant="Default">
+    <Application.Resources>
+        <converters:InverseBoolConverter x:Key="InverseBool" />
+    </Application.Resources>
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

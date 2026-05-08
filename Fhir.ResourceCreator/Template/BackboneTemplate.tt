@@ -1,0 +1,66 @@
+﻿<#@ template language="C#" #>
+using Core.Extension;
+using DataTypeService.Based;
+using DataTypeService.Special;
+using DataTypeService.Complex;
+using System.Text.Json.Nodes;
+using DataTypeService.Meta;
+<#if(_needResourceBased){#>
+using ResourceTypeBased;
+<#}#>
+using Primitive = DataTypeService.Primitive;
+<# if(_hasChoice) { #>
+using  ResourceTypeServices.R5.<#=_resourceName#>Sub.Choice;
+<#}#>
+<# if(_needUsing) {#>
+using ResourceTypeServices.R5.<#=_namespaceSub#>.<#=_className#>Sub;
+<#}#>
+namespace ResourceTypeServices.R5.<#= _namespaceSub #>
+{
+    public class <#=_className#> : BackboneElement
+    {
+
+        #region Property
+        <#=  _properties  #>
+        #endregion
+        #region Constructor
+        public  <#=_className#>() { }
+        public  <#=_className#>(string value) : this(value.Parse()) { }
+        public  <#=_className#>(JsonNode source)
+        {
+            _JsonNode = source;
+            if (source != null)
+            {
+                var values = source.AsObject().GetEnumerator();
+                while (values.MoveNext())
+                {
+                    var ck = values.Current.Key;
+                    var cv = values.Current.Value;
+                    switch (ck)
+                    {
+                    <#= _constructor  #>
+                    }
+                }
+            }
+
+        }
+
+        #endregion
+        #region From Parent
+        protected override string _TypeName => "<#= _className #>";
+
+        #endregion
+
+        #region public Method
+        public override void SetProperties(string tagName = null)
+        {
+            List<KeyValuePair<string, JsonNode>> result = new();
+            <#= _setup  #>
+            _Properties = result;
+        }
+
+
+
+        #endregion
+    }
+}

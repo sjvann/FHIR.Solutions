@@ -1,0 +1,21 @@
+---
+description: 技術棧基準 — .NET 版本、專案對齊與 ResourceCreator 例外
+alwaysApply: true
+---
+
+# 技術架構（FHIR.Solutions）
+
+## .NET 與專案對齊
+
+- **預設目標框架**：**`net10.0`**。新増程式庫或測試專案一律對齊 `Fhir.TypeFramework` / `Fhir.TypeFramework.Tests`。
+- **C# 專案**：`ImplicitUsings` 與 `Nullable` 維持 **enable**，與現有 `.csproj` 一致。
+- **方案**：`Fhir.Solution.slnx`。
+
+## 目前例外
+
+- **`Fhir.ResourceCreator`** 仍為 **`net8.0-windows10.0.22621.0`**（既有 Windows／OLE DB／T4 路徑）。修改時勿在未經任務要求下擅自改 TF；若任務為「對齊技術棧」，優先將其升級至 **`net10.0`** 並一併處理相依（例如移除僅為 Excel 路徑存在的限定）。
+- 新增套件參考時，版本宜與**同方案內最近似專案**對齊。
+
+## 與文件來源
+
+- 較長說明與「為何不用 skill」請見 repository 根目錄 **`AGENTS.md`**；若兩處衝突，以 **`.csproj` 實際設定為準**，並應回寫更新文件。

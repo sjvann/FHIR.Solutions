@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Fhir.Resource.Tests.Common</RootNamespace>
+    <Description>Shared JSON round-trip helpers, wire-format codec abstraction (JSON/XML stub), and UTF-8 fixture loading for generated FHIR resource tests.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fhir.TypeFramework\Fhir.TypeFramework.csproj" />
+  </ItemGroup>
+
+</Project>

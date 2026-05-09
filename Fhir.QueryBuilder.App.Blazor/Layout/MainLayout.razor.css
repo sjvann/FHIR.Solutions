@@ -7,4 +7,22 @@
 
 main.content {
     flex: 1;
+    /* 預留位置給固定置底頁尾，避免被覆蓋（與 .qb-footer 高度同步調整） */
+    padding-bottom: 96px;
+}
+
+.qb-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1030;
+    background-color: #f8f9fa;
+    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.qb-footer-logo {
+    height: 40px;
+    width: auto;
+    object-fit: contain;
 }

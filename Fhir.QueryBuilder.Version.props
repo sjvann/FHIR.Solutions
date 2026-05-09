@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
     <!-- Query Builder / 安裝程式共用版號。執行 Fhir.QueryBuilder.Installer/build_installer.py 時會自動遞增第三段（patch）。 -->
-    <FHIRQueryBuilderVersion>1.0.3</FHIRQueryBuilderVersion>
+    <FHIRQueryBuilderVersion>1.0.6</FHIRQueryBuilderVersion>
   </PropertyGroup>
 </Project>

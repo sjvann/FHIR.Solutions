@@ -93,7 +93,7 @@ if (launchBrowser && openUrl is not null)
 }
 
 Console.WriteLine($"FHIR Query Builder — open in browser: {openUrl ?? urls}");
-Console.WriteLine("Press Ctrl+C to stop, close this window, or use the in-app “結束程式（關閉後端）” button.");
+Console.WriteLine("Press Ctrl+C to stop, or close this console window.");
 
 app.Run();
 

@@ -11,10 +11,12 @@
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <TextBlock FontWeight="SemiBold"
                            VerticalAlignment="Center"
-                           TextWrapping="Wrap">
-                    <Run Text="Selected: " />
-                    <Run Text="{Binding SelectedSearchParameter.DisplayText}" />
-                </TextBlock>
+                           TextWrapping="Wrap"
+                           Text="{Binding UiStrings.SelectedLabel}" />
+                <TextBlock FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"
+                           Text="{Binding SelectedSearchParameter.DisplayText}" />
                 <TextBlock VerticalAlignment="Center"
                            FontSize="13"
                            Foreground="Gray"
@@ -34,7 +36,7 @@
             <TextBlock Foreground="Gray"
                        FontSize="12"
                        IsVisible="{Binding EditorUnsupportedVisible}"
-                       Text="This parameter type has no typed builder yet — use Draft lines or raw FHIR syntax." />
+                       Text="{Binding UiStrings.EditorUnsupported}" />
 
             <Border Padding="8"
                     CornerRadius="6"
@@ -42,10 +44,10 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorStringVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="String" />
-                    <TextBox Watermark="modifier label (empty = default, or exact, contains, missing, text)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.String}" />
+                    <TextBox Watermark="{Binding UiStrings.ModifierLabel}"
                              Text="{Binding TypedSearch.StringGroupModifier}" />
-                    <TextBox Watermark="value"
+                    <TextBox Watermark="{Binding UiStrings.Value}"
                              Text="{Binding TypedSearch.StringValue}" />
                 </StackPanel>
             </Border>
@@ -56,14 +58,14 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorTokenVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Token" />
-                    <TextBox Watermark="modifier (text, of-type, not-in, not, missing, in, below, above…)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Token}" />
+                    <TextBox Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.TokenGroupModifier}" />
-                    <TextBox Watermark="code only"
+                    <TextBox Watermark="{Binding UiStrings.CodeOnly}"
                              Text="{Binding TypedSearch.TokenCodeOnly}" />
-                    <TextBox Watermark="system"
+                    <TextBox Watermark="{Binding UiStrings.SystemLabel}"
                              Text="{Binding TypedSearch.TokenSystem}" />
-                    <TextBox Watermark="code (with system)"
+                    <TextBox Watermark="{Binding UiStrings.CodeWithSystem}"
                              Text="{Binding TypedSearch.TokenCodeWithSystem}" />
                 </StackPanel>
             </Border>
@@ -74,10 +76,10 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorUriVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Uri" />
-                    <TextBox Watermark="modifier (missing, contains, below, above)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Uri}" />
+                    <TextBox Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.UriGroupModifier}" />
-                    <TextBox Watermark="uri value"
+                    <TextBox Watermark="{Binding UiStrings.UriValue}"
                              Text="{Binding TypedSearch.UriText}" />
                 </StackPanel>
             </Border>
@@ -90,32 +92,32 @@
                 <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
                                FontWeight="SemiBold"
-                               Text="Reference" />
+                               Text="{Binding UiStrings.Reference}" />
                     <TextBox Grid.Row="1"
                              Grid.Column="0"
                              Grid.ColumnSpan="2"
-                             Watermark="modifier (text, not-in, missing, identifier, below, above)"
+                             Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.ReferenceGroupModifier}" />
                     <TextBox Grid.Row="2"
                              Grid.Column="0"
-                             Watermark="logical id"
+                             Watermark="{Binding UiStrings.LogicalId}"
                              Text="{Binding TypedSearch.ReferenceId}" />
                     <TextBox Grid.Row="2"
                              Grid.Column="1"
-                             Watermark="version"
+                             Watermark="{Binding UiStrings.Version}"
                              Text="{Binding TypedSearch.ReferenceVersion}" />
                     <TextBox Grid.Row="3"
                              Grid.Column="0"
-                             Watermark="ResourceType"
+                             Watermark="{Binding UiStrings.ResourceTypePh}"
                              Text="{Binding TypedSearch.ReferenceType}" />
                     <TextBox Grid.Row="3"
                              Grid.Column="1"
-                             Watermark="logical id (type/id)"
+                             Watermark="{Binding UiStrings.LogicalIdTypeSlash}"
                              Text="{Binding TypedSearch.ReferenceTypeId}" />
                     <TextBox Grid.Row="4"
                              Grid.Column="0"
                              Grid.ColumnSpan="2"
-                             Watermark="canonical URL"
+                             Watermark="{Binding UiStrings.CanonicalUrlPlaceholder}"
                              Text="{Binding TypedSearch.ReferenceUrl}" />
                 </Grid>
             </Border>
@@ -126,13 +128,13 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorNumberVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Number" />
-                    <TextBox Watermark="modifier (missing)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Number}" />
+                    <TextBox Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.NumberGroupModifier}" />
                     <ComboBox ItemsSource="{Binding NumberSearchPrefixes}"
                               SelectedItem="{Binding TypedSearch.NumberPrefix}"
-                              PlaceholderText="prefix" />
-                    <TextBox Watermark="value"
+                              PlaceholderText="{Binding UiStrings.PrefixOption}" />
+                    <TextBox Watermark="{Binding UiStrings.Value}"
                              Text="{Binding TypedSearch.NumberValue}" />
                 </StackPanel>
             </Border>
@@ -143,13 +145,13 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorDateVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Date" />
-                    <TextBox Watermark="modifier (missing)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Date}" />
+                    <TextBox Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.DateGroupModifier}" />
                     <ComboBox ItemsSource="{Binding DateSearchPrefixes}"
                               SelectedItem="{Binding TypedSearch.DatePrefix}"
-                              PlaceholderText="prefix" />
-                    <TextBox Watermark="value (e.g. 2020-01-01 or yyyy-mm)"
+                              PlaceholderText="{Binding UiStrings.PrefixOption}" />
+                    <TextBox Watermark="{Binding UiStrings.Value}"
                              Text="{Binding TypedSearch.DateValue}" />
                 </StackPanel>
             </Border>
@@ -160,22 +162,22 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorQuantityVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Quantity" />
-                    <TextBox Watermark="modifier (missing)"
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Quantity}" />
+                    <TextBox Watermark="{Binding UiStrings.Modifier}"
                              Text="{Binding TypedSearch.QuantityGroupModifier}" />
                     <ComboBox ItemsSource="{Binding QuantitySearchPrefixes}"
                               SelectedItem="{Binding TypedSearch.QuantityPrefix}"
-                              PlaceholderText="prefix" />
-                    <TextBox Watermark="decimal number"
+                              PlaceholderText="{Binding UiStrings.PrefixOption}" />
+                    <TextBox Watermark="{Binding UiStrings.DecimalNumber}"
                              Text="{Binding TypedSearch.QuantityNumber}" />
                     <TextBlock FontSize="11"
                                Foreground="Gray"
-                               Text="Or coded quantity:" />
-                    <TextBox Watermark="number"
+                               Text="{Binding UiStrings.OrCodedQuantity}" />
+                    <TextBox Watermark="{Binding UiStrings.ValueNumberPlaceholder}"
                              Text="{Binding TypedSearch.QuantityNscNumber}" />
-                    <TextBox Watermark="system"
+                    <TextBox Watermark="{Binding UiStrings.SystemLabel}"
                              Text="{Binding TypedSearch.QuantityNscSystem}" />
-                    <TextBox Watermark="code"
+                    <TextBox Watermark="{Binding UiStrings.Code}"
                              Text="{Binding TypedSearch.QuantityNscCode}" />
                 </StackPanel>
             </Border>
@@ -186,19 +188,18 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorCompositeVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Composite" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Composite}" />
                     <StackPanel IsVisible="{Binding CompositeRichRowsVisible}" Spacing="8">
                         <TextBlock FontSize="11"
                                    Foreground="Gray"
-                                   Text="Parts from server SearchParameter.component (TD-1)."
+                                   Text="{Binding UiStrings.CompositeMetadataFromServer}"
                                    TextWrapping="Wrap"
                                    IsVisible="{Binding CompositeMetadataLoadedFromServer}" />
                         <TextBlock FontSize="11"
                                    Foreground="Gray"
+                                   Text="{Binding UiStrings.CompositeLocalBlocks}"
                                    TextWrapping="Wrap"
-                                   IsVisible="{Binding CompositeMetadataLoadedFromServer, Converter={StaticResource InverseBool}}">
-                            Using local component editors (best-effort types from the parameter name when metadata is missing). Each block is one component; values are joined with $ when you add the typed clause.
-                        </TextBlock>
+                                   IsVisible="{Binding CompositeMetadataLoadedFromServer, Converter={StaticResource InverseBool}}" />
                         <ItemsControl ItemsSource="{Binding TypedSearch.CompositePartRows}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="searchUi:CompositePartRow">
@@ -222,21 +223,21 @@
                                             <StackPanel IsVisible="{Binding IsQuantityComponent}" Spacing="4">
                                                 <ComboBox ItemsSource="{Binding #Root.((vm:MainViewModel)DataContext).QuantitySearchPrefixes}"
                                                           SelectedItem="{Binding QuantityPrefix}"
-                                                          PlaceholderText="prefix" />
-                                                <TextBox Watermark="decimal number"
+                                                          PlaceholderText="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.PrefixOption}" />
+                                                <TextBox Watermark="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.DecimalNumber}"
                                                          Text="{Binding QuantityNumber}" />
                                                 <TextBlock FontSize="11"
                                                            Foreground="Gray"
-                                                           Text="Or coded quantity:" />
-                                                <TextBox Watermark="number"
+                                                           Text="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.OrCodedQuantity}" />
+                                                <TextBox Watermark="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.ValueNumberPlaceholder}"
                                                          Text="{Binding QuantityNscNumber}" />
-                                                <TextBox Watermark="system"
+                                                <TextBox Watermark="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.SystemLabel}"
                                                          Text="{Binding QuantityNscSystem}" />
-                                                <TextBox Watermark="code"
+                                                <TextBox Watermark="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.Code}"
                                                          Text="{Binding QuantityNscCode}" />
                                             </StackPanel>
                                             <StackPanel IsVisible="{Binding IsFallbackComponent}" Spacing="4">
-                                                <TextBox Watermark="component value"
+                                                <TextBox Watermark="{Binding #Root.((vm:MainViewModel)DataContext).UiStrings.ComponentValue}"
                                                          Text="{Binding Value}" />
                                             </StackPanel>
                                         </StackPanel>
@@ -248,12 +249,12 @@
                     <StackPanel IsVisible="{Binding CompositeCsvFallbackVisible}" Spacing="6">
                         <TextBlock FontSize="11"
                                    Foreground="Gray"
-                                   Text="At least two comma-separated components; joined with $ per FHIR composite search."
+                                   Text="{Binding UiStrings.CompositeCsvHint}"
                                    TextWrapping="Wrap" />
-                        <TextBox Watermark="component1, component2, ..."
+                        <TextBox Watermark="{Binding UiStrings.CompositeCsvPlaceholder}"
                                  Text="{Binding TypedSearch.CompositeComponentsCsv}" />
                     </StackPanel>
-                    <TextBox Watermark="modifier label"
+                    <TextBox Watermark="{Binding UiStrings.ModifierLabel}"
                              Text="{Binding TypedSearch.CompositeGroupModifier}" />
                 </StackPanel>
             </Border>
@@ -264,20 +265,20 @@
                     BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
                     IsVisible="{Binding EditorSpecialVisible}">
                 <StackPanel Spacing="6">
-                    <TextBlock FontWeight="SemiBold" Text="Special" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.Special}" />
                     <TextBlock FontSize="11"
                                Foreground="Gray"
-                               Text="Value format depends on this SearchParameter; see documentation above or server docs."
+                               Text="{Binding UiStrings.SpecialValueHint}"
                                TextWrapping="Wrap" />
-                    <TextBox Watermark="modifier label"
+                    <TextBox Watermark="{Binding UiStrings.ModifierLabel}"
                              Text="{Binding TypedSearch.SpecialGroupModifier}" />
-                    <TextBox Watermark="value"
+                    <TextBox Watermark="{Binding UiStrings.Value}"
                              Text="{Binding TypedSearch.SpecialValue}" />
                 </StackPanel>
             </Border>
 
             <Button HorizontalAlignment="Left"
-                    Content="Add typed clause to draft"
+                    Content="{Binding UiStrings.AddTypedClauseToDraft}"
                     Command="{Binding AddTypedSearchClauseCommand}" />
         </StackPanel>
     </ScrollViewer>

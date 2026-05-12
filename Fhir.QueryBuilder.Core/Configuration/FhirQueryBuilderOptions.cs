@@ -8,6 +8,12 @@ namespace Fhir.QueryBuilder.Configuration
     {
         public const string SectionName = "Fhir.QueryBuilder";
 
+        /// <summary>
+        /// Blazor 等 UI 預設語系（例：<c>zh-TW</c>、<c>zh-CN</c>、<c>en</c>、<c>ja</c>、<c>ko</c>）。
+        /// 空白則由主機程式決定（Blazor 預設為繁體中文）；使用者若曾於瀏覽器選語系，仍以 localStorage 為準。
+        /// </summary>
+        public string DefaultUiLanguage { get; set; } = "";
+
         /// <summary>預設 FHIR 線別簡寫：R4、R4B、R5（與 <see cref="FhirVersionParser.ParseFromShortName"/> 一致）。</summary>
         public string DefaultFhirVersion { get; set; } = "R5";
 

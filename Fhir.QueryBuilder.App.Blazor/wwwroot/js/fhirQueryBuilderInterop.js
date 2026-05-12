@@ -1,4 +1,23 @@
 window.fhirQueryBuilderInterop = {
+    getUiLang: function () {
+        try {
+            return localStorage.getItem('fhir.qb.uiLang');
+        } catch (e) {
+            return null;
+        }
+    },
+
+    setUiLang: function (code) {
+        try {
+            if (code)
+                localStorage.setItem('fhir.qb.uiLang', code);
+            else
+                localStorage.removeItem('fhir.qb.uiLang');
+        } catch (e) {
+            /* ignore */
+        }
+    },
+
     downloadTextFile: function (fileName, content) {
         const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
         const url = URL.createObjectURL(blob);

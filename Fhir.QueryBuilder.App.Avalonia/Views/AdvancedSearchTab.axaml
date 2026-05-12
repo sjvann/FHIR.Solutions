@@ -8,18 +8,18 @@
                   VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="10" Spacing="14">
             <TextBlock FontWeight="SemiBold"
-                       Text="Chain parameters" />
+                       Text="{Binding UiStrings.ChainParameters}" />
             <Grid ColumnDefinitions="*,*,Auto">
                 <TextBox Grid.Column="0"
                          Margin="0,0,8,0"
-                         Watermark="path (e.g. patient.name)"
+                         Watermark="{Binding UiStrings.PathPlaceholderChain}"
                          Text="{Binding Advanced.PendingChainPath}" />
                 <TextBox Grid.Column="1"
                          Margin="0,0,8,0"
-                         Watermark="value"
+                         Watermark="{Binding UiStrings.Value}"
                          Text="{Binding Advanced.PendingChainValue}" />
                 <Button Grid.Column="2"
-                        Content="Add"
+                        Content="{Binding UiStrings.Add}"
                         Command="{Binding TryAddAdvancedChainCommand}" />
             </Grid>
             <ListBox MinHeight="56"
@@ -38,18 +38,18 @@
             <Separator />
 
             <TextBlock FontWeight="SemiBold"
-                       Text="Composite parameters" />
+                       Text="{Binding UiStrings.CompositeParameters}" />
             <Grid ColumnDefinitions="*,*,Auto">
                 <TextBox Grid.Column="0"
                          Margin="0,0,8,0"
-                         Watermark="parameter name"
+                         Watermark="{Binding UiStrings.ParameterNamePlaceholder}"
                          Text="{Binding Advanced.PendingCompositeName}" />
                 <TextBox Grid.Column="1"
                          Margin="0,0,8,0"
-                         Watermark="components (comma-separated)"
+                         Watermark="{Binding UiStrings.ComponentsCommaPlaceholder}"
                          Text="{Binding Advanced.PendingCompositeComponents}" />
                 <Button Grid.Column="2"
-                        Content="Add"
+                        Content="{Binding UiStrings.Add}"
                         Command="{Binding TryAddAdvancedCompositeCommand}" />
             </Grid>
             <ListBox MinHeight="48"
@@ -68,14 +68,14 @@
             <Separator />
 
             <TextBlock FontWeight="SemiBold"
-                       Text="_filter expressions" />
+                       Text="{Binding UiStrings.FilterExpressions}" />
             <Grid ColumnDefinitions="*,Auto">
                 <TextBox Grid.Column="0"
-                         Watermark="FHIR filter expression"
+                         Watermark="{Binding UiStrings.FhirFilterPlaceholder}"
                          Text="{Binding Advanced.PendingFilterExpression}" />
                 <Button Grid.Column="1"
                         Margin="8,0,0,0"
-                        Content="Add"
+                        Content="{Binding UiStrings.Add}"
                         Command="{Binding TryAddAdvancedFilterCommand}" />
             </Grid>
             <ListBox MinHeight="56"
@@ -84,7 +84,7 @@
             <Separator />
 
             <TextBlock FontWeight="SemiBold"
-                       Text="Result control (_count, _offset, _total, _summary, _elements)" />
+                       Text="{Binding UiStrings.ResultControl}" />
             <Grid ColumnDefinitions="Auto,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                 <TextBlock Grid.Row="0"
@@ -135,12 +135,12 @@
                          AcceptsReturn="True"
                          TextWrapping="Wrap"
                          MinHeight="48"
-                         Watermark="comma-separated element names"
+                         Watermark="{Binding UiStrings.ResultElementsCsvPlaceholder}"
                          Text="{Binding Advanced.ResultElementsCsv}" />
             </Grid>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Clear advanced"
+                <Button Content="{Binding UiStrings.ClearAdvanced}"
                         Command="{Binding ClearAdvancedSearchCommand}" />
             </StackPanel>
         </StackPanel>

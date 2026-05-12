@@ -2,6 +2,7 @@ using Fhir.Auth.TokenServer.Configuration;
 using Fhir.QueryBuilder.Configuration;
 using Fhir.QueryBuilder.Extensions;
 using Fhir.QueryBuilder.Platform;
+using Fhir.QueryBuilder.Localization;
 using Fhir.QueryBuilder.PlatformServices;
 using Fhir.QueryBuilder.QueryBuilders.FluentApi;
 using Fhir.QueryBuilder.Services;
@@ -78,6 +79,7 @@ namespace Fhir.QueryBuilder
                     services.AddSingleton<IClipboardTextService, WindowsClipboardTextService>();
                     services.AddSingleton<IFilePickerSaveTextService, WindowsFilePickerSaveTextService>();
 
+                    services.AddSingleton<QueryBuilderUiLanguageService>();
                     services.AddTransient<MainViewModel>();
                     services.AddTransient<NewMainForm>();
 

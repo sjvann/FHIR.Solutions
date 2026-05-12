@@ -2,6 +2,7 @@ using Fhir.Auth.TokenServer.Configuration;
 using Fhir.QueryBuilder.App.Blazor;
 using Fhir.QueryBuilder.App.Blazor.Services;
 using Fhir.QueryBuilder.Configuration;
+using Fhir.QueryBuilder.Localization;
 using Fhir.QueryBuilder.Extensions;
 using Fhir.QueryBuilder.Platform;
 using Fhir.QueryBuilder.QueryBuilders.FluentApi;
@@ -58,6 +59,7 @@ builder.Services.AddSingleton<IExportService, ExportService>();
 builder.Services.AddSingleton<IClipboardTextService, BlazorClipboardTextService>();
 builder.Services.AddSingleton<IFilePickerSaveTextService, BlazorFilePickerSaveTextService>();
 builder.Services.AddSingleton<IExternalUriLauncher, BlazorExternalUriLauncher>();
+builder.Services.AddSingleton<QueryBuilderUiLanguageService>();
 builder.Services.AddSingleton<MainViewModel>();
 
 await builder.Build().RunAsync().ConfigureAwait(false);

@@ -8,7 +8,7 @@
         <StackPanel Margin="10" Spacing="14">
             <TextBlock FontWeight="SemiBold"
                        TextWrapping="Wrap"
-                       Text="結果修飾參數" />
+                       Text="{Binding UiStrings.ModifyingSectionTitle}" />
 
             <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                 <TextBlock Grid.Row="0" Grid.Column="0"
@@ -36,7 +36,7 @@
                            Text="_count" />
                 <TextBox Grid.Row="2" Grid.Column="1"
                          Margin="0,0,0,8"
-                         Watermark="分頁筆數"
+                         Watermark="{Binding UiStrings.PaginationCount}"
                          Text="{Binding Modifying.CountValue}" />
 
                 <TextBlock Grid.Row="3" Grid.Column="0"
@@ -45,7 +45,7 @@
                            Text="_maxresults" />
                 <TextBox Grid.Row="3" Grid.Column="1"
                          Margin="0,0,0,8"
-                         Watermark="Bundle 內最大筆數"
+                         Watermark="{Binding UiStrings.MaxResultsInBundle}"
                          Text="{Binding Modifying.MaxResultsValue}" />
 
                 <TextBlock Grid.Row="4" Grid.Column="0"
@@ -59,7 +59,7 @@
 
             <Separator />
 
-            <TextBlock FontWeight="SemiBold" Text="_elements／_sort" />
+            <TextBlock FontWeight="SemiBold" Text="{Binding UiStrings.ElementsSortSection}" />
             <Grid RowDefinitions="Auto,Auto">
                 <ComboBox Grid.Row="0"
                           HorizontalAlignment="Stretch"
@@ -72,13 +72,13 @@
                             Spacing="12">
                     <CheckBox VerticalAlignment="Center"
                               Margin="0,0,4,0"
-                              Content="Sort 前綴「-」"
+                              Content="{Binding UiStrings.SortPrefixMinus}"
                               IsChecked="{Binding Modifying.SortDescendingPrefix}" />
                     <Button VerticalAlignment="Center"
-                            Content="加入 Elements"
+                            Content="{Binding UiStrings.AddElements}"
                             Command="{Binding ModifyingAddElementCommand}" />
                     <Button VerticalAlignment="Center"
-                            Content="加入 Sort"
+                            Content="{Binding UiStrings.AddSort}"
                             Command="{Binding ModifyingAddSortCommand}" />
                 </StackPanel>
             </Grid>
@@ -87,29 +87,29 @@
                 <StackPanel Grid.Column="0"
                             Margin="0,0,6,0"
                             Spacing="8">
-                    <TextBlock FontSize="12" Opacity="0.8" Text="Elements 列表" />
+                    <TextBlock FontSize="12" Opacity="0.8" Text="{Binding UiStrings.ElementsList}" />
                     <ListBox MinHeight="80"
                              MaxHeight="160"
                              ItemsSource="{Binding Modifying.Elements}" />
                     <Button HorizontalAlignment="Stretch"
-                            Content="清空 Elements"
+                            Content="{Binding UiStrings.ClearElements}"
                             Command="{Binding ModifyingClearElementsCommand}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1"
                             Margin="6,0,0,0"
                             Spacing="8">
-                    <TextBlock FontSize="12" Opacity="0.8" Text="Sort 列表" />
+                    <TextBlock FontSize="12" Opacity="0.8" Text="{Binding UiStrings.SortList}" />
                     <ListBox MinHeight="80"
                              MaxHeight="160"
                              ItemsSource="{Binding Modifying.SortLines}" />
                     <Button HorizontalAlignment="Stretch"
-                            Content="清空 Sort"
+                            Content="{Binding UiStrings.ClearSort}"
                             Command="{Binding ModifyingClearSortCommand}" />
                 </StackPanel>
             </Grid>
 
             <Button HorizontalAlignment="Left"
-                    Content="重設本頁"
+                    Content="{Binding UiStrings.ResetThisPage}"
                     Command="{Binding ModifyingResetFormCommand}" />
         </StackPanel>
     </ScrollViewer>

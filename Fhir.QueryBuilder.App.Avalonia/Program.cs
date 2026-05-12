@@ -4,6 +4,7 @@ using Fhir.QueryBuilder.App.Avalonia.Services;
 using Fhir.Auth.TokenServer.Configuration;
 using Fhir.QueryBuilder.Configuration;
 using Fhir.QueryBuilder.Extensions;
+using Fhir.QueryBuilder.Localization;
 using Fhir.QueryBuilder.Platform;
 using Fhir.QueryBuilder.QueryBuilders.FluentApi;
 using Fhir.QueryBuilder.Services;
@@ -56,6 +57,7 @@ internal static class Program
                 services.AddSingleton<IFilePickerSaveTextService, AvaloniaFilePickerSaveTextService>();
                 services.AddSingleton<IApplicationLifetimeService, AvaloniaApplicationLifetimeService>();
 
+                services.AddSingleton<QueryBuilderUiLanguageService>();
                 services.AddSingleton<MainViewModel>();
                 services.AddTransient<MainWindow>();
             })
@@ -65,6 +67,8 @@ internal static class Program
                 b.SetMinimumLevel(LogLevel.Information);
             })
             .Build();
+
+        AvaloniaUiLanguagePersistence.TryLoad(host.Services.GetRequiredService<QueryBuilderUiLanguageService>());
 
         var services = host.Services;
         var appBuilder = BuildAvaloniaApp(services);

@@ -1,22 +1,24 @@
 ﻿@page "/"
 @implements IDisposable
 @inject MainViewModel Vm
+@inject QueryBuilderUiLanguageService Lang
+@inject IJSRuntime Js
 
 <div class="container-fluid py-3 qb-blazor">
     <div class="card shadow-sm mb-3">
         <div class="card-body">
             <div class="row g-2 align-items-center mb-2">
                 <div class="col-lg-5">
-                    <input class="form-control" placeholder="FHIR base URL" @bind="Vm.ServerUrl" @bind:event="oninput" />
+                    <input class="form-control" placeholder="@Lang.Strings.FhirBaseUrlPlaceholder" @bind="Vm.ServerUrl" @bind:event="oninput" />
                 </div>
                 <div class="col-lg-3">
                     <button type="button" class="btn btn-primary me-2" disabled="@Vm.IsLoading"
-                            @onclick="@ConnectAsync">Connect</button>
+                            @onclick="@ConnectAsync">@Lang.Strings.Connect</button>
                     <button type="button" class="btn btn-outline-secondary" disabled="@(!Vm.IsLoading)"
-                            @onclick="@CancelOp">Cancel</button>
+                            @onclick="@CancelOp">@Lang.Strings.Cancel</button>
                 </div>
                 <div class="col-lg-4">
-                    <label class="form-label small text-muted mb-0">Resource type</label>
+                    <label class="form-label small text-muted mb-0">@Lang.Strings.ResourceType</label>
                     <select class="form-select form-select-sm" disabled="@(!Vm.IsConnected)"
                             value="@Vm.SelectedResource"
                             @onchange="OnResourceChangedAsync">
@@ -28,9 +30,9 @@
                     </select>
                 </div>
             </div>
-            <div class="row g-2 align-items-center mb-2 small">
-                <div class="col-auto text-muted">FHIR 宣告</div>
-                <div class="col-auto">
+            <div class="d-flex flex-wrap align-items-center mb-2 small column-gap-2 row-gap-1">
+                <div class="text-muted">@Lang.Strings.FhirDeclaration</div>
+                <div>
                     <select class="form-select form-select-sm" style="width: 5.5rem"
                             @bind="Vm.SelectedFhirVersionShort" @bind:event="onchange">
                         @foreach (var v in Vm.FhirVersionChoices)
@@ -39,13 +41,26 @@
                         }
                     </select>
                 </div>
-                <div class="col-auto text-muted">偵測</div>
-                <div class="col-auto fw-semibold">@Vm.DetectedFhirVersionDisplay</div>
-                <div class="col-auto text-muted">作用</div>
-                <div class="col-auto fw-semibold">@Vm.ActiveFhirVersionDisplay</div>
+                <div class="text-muted">@Lang.Strings.Detected</div>
+                <div class="fw-semibold">@Vm.DetectedFhirVersionDisplay</div>
+                <div class="text-muted">@Lang.Strings.Active</div>
+                <div class="fw-semibold">@Vm.ActiveFhirVersionDisplay</div>
+                <div class="ms-auto d-flex align-items-center gap-1 flex-shrink-0">
+                    <label class="form-label small text-muted mb-0">@Lang.Strings.Language</label>
+                    <select class="form-select form-select-sm"
+                            style="width: auto; min-width: 7.25rem"
+                            value="@Lang.CultureCode"
+                            @onchange="OnUiLanguageChangedAsync">
+                        <option value="@QueryBuilderUiCultureCodes.ZhTw">繁體中文</option>
+                        <option value="@QueryBuilderUiCultureCodes.ZhCn">简体中文</option>
+                        <option value="@QueryBuilderUiCultureCodes.En">English</option>
+                        <option value="@QueryBuilderUiCultureCodes.Ja">日本語</option>
+                        <option value="@QueryBuilderUiCultureCodes.Ko">한국어</option>
+                    </select>
+                </div>
             </div>
             <div class="mb-2">
-                <label class="form-label small text-muted mb-0">Bearer access token（選填）</label>
+                <label class="form-label small text-muted mb-0">@Lang.Strings.BearerTokenOptional</label>
                 <input type="password" class="form-control form-control-sm" autocomplete="off"
                        @bind="Vm.BearerAccessToken" @bind:event="oninput" />
             </div>
@@ -53,33 +68,33 @@
             @if (Vm.SupportOAuth)
             {
                 <div class="border rounded p-3 mt-2 bg-light bg-opacity-25">
-                    <div class="fw-semibold small mb-2">SMART on FHIR</div>
+                    <div class="fw-semibold small mb-2">@Lang.Strings.SmartOnFhir</div>
                     <div class="row g-2 mb-2">
-                        <label class="col-sm-2 col-form-label small">Client ID</label>
+                        <label class="col-sm-2 col-form-label small">@Lang.Strings.ClientId</label>
                         <div class="col-sm-10">
                             <input class="form-control form-control-sm" @bind="Vm.SmartClientId" @bind:event="oninput" />
                         </div>
                     </div>
-                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Scopes"
+                    <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="@Lang.Strings.ScopesPlaceholder"
                               @bind="Vm.SmartScopes"></textarea>
-                    <textarea class="form-control form-control-sm mb-2 font-monospace" rows="3" placeholder="機密客戶端 PEM"
+                    <textarea class="form-control form-control-sm mb-2 font-monospace" rows="3" placeholder="@Lang.Strings.PrivateKeyPemPlaceholder"
                               @bind="Vm.SmartPrivateKeyPem"></textarea>
-                    @if (!string.IsNullOrWhiteSpace(Vm.SmartPatientSummary))
+                    @if (!string.IsNullOrWhiteSpace(Vm.SmartSessionPatient))
                     {
-                        <p class="small text-muted mb-2">@Vm.SmartPatientSummary</p>
+                        <p class="small text-muted mb-2">@string.Format(Lang.Strings.SmartPatientContextFormat, Vm.SmartSessionPatient.Trim())</p>
                     }
                     <div class="d-flex flex-wrap gap-2">
                         <button type="button" class="btn btn-outline-primary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@SmartLoginAsync">SMART 登入（瀏覽器 PKCE）</button>
+                                @onclick="@SmartLoginAsync">@Lang.Strings.SmartLoginPkce</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@RefreshSmartAsync">刷新 access token</button>
+                                @onclick="@RefreshSmartAsync">@Lang.Strings.RefreshAccessToken</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@JwtCcAsync">JWT client_credentials</button>
+                                @onclick="@JwtCcAsync">@Lang.Strings.JwtClientCredentials</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@ClearSmart">清除 SMART session</button>
-                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenAuthUrl">Open authorize URL</button>
-                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenTokUrl">Open token URL</button>
-                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@CopyTokenUrlAsync">Copy token URL</button>
+                                @onclick="@ClearSmart">@Lang.Strings.ClearSmartSession</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenAuthUrl">@Lang.Strings.OpenAuthorizeUrl</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@OpenTokUrl">@Lang.Strings.OpenTokenUrl</button>
+                        <button type="button" class="btn btn-link btn-sm py-0" @onclick="@CopyTokenUrlAsync">@Lang.Strings.CopyTokenUrl</button>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(Vm.TokenUrl))
                     {
@@ -99,7 +114,7 @@
                     <div>@err</div>
                 }
             </div>
-            <button type="button" class="btn btn-sm btn-outline-dark" @onclick="@ClearVal">Clear</button>
+            <button type="button" class="btn btn-sm btn-outline-dark" @onclick="@ClearVal">@Lang.Strings.Clear</button>
         </div>
     }
 
@@ -107,15 +122,15 @@
         <div class="card-body py-2">
             <div class="row g-2 align-items-center">
                 <div class="col-lg-7">
-                    <input class="form-control form-control-sm" placeholder="Full query URL" @bind="Vm.QueryUrl" @bind:event="oninput" />
+                    <input class="form-control form-control-sm" placeholder="@Lang.Strings.FullQueryUrlPlaceholder" @bind="Vm.QueryUrl" @bind:event="oninput" />
                 </div>
                 <div class="col-lg-5 text-lg-end">
                     <button type="button" class="btn btn-outline-secondary btn-sm me-1" disabled="@Vm.IsLoading"
-                            @onclick="@BuildComposed">Build composed URL</button>
+                            @onclick="@BuildComposed">@Lang.Strings.BuildComposedUrl</button>
                     <button type="button" class="btn btn-primary btn-sm me-1" disabled="@Vm.IsLoading"
-                            @onclick="@ExecuteAsync">Execute query</button>
+                            @onclick="@ExecuteAsync">@Lang.Strings.ExecuteQuery</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                            @onclick="@ClearUrl">Clear URL</button>
+                            @onclick="@ClearUrl">@Lang.Strings.ClearUrl</button>
                 </div>
             </div>
         </div>
@@ -124,22 +139,22 @@
     <div class="row g-2">
         <div class="col-xl-5">
             <div class="card shadow-sm h-100">
-                <div class="card-header py-2 small fw-semibold">Query</div>
+                <div class="card-header py-2 small fw-semibold">@Lang.Strings.CardQuery</div>
                 <div class="card-body p-2">
                     <div class="btn-group btn-group-sm mb-2" role="group">
                         <button type="button" class="btn @(QueryTab == "params" ? "btn-primary" : "btn-outline-primary")"
-                                @onclick="@(() => QueryTab = "params")">Search parameters</button>
+                                @onclick="@(() => QueryTab = "params")">@Lang.Strings.TabSearchParameters</button>
                         <button type="button" class="btn @(QueryTab == "advanced" ? "btn-primary" : "btn-outline-primary")"
-                                @onclick="@(() => QueryTab = "advanced")">Advanced</button>
+                                @onclick="@(() => QueryTab = "advanced")">@Lang.Strings.TabAdvanced</button>
                         <button type="button" class="btn @(QueryTab == "modify" ? "btn-primary" : "btn-outline-primary")"
-                                @onclick="@(() => QueryTab = "modify")">Modifying results</button>
+                                @onclick="@(() => QueryTab = "modify")">@Lang.Strings.TabModifyingResults</button>
                     </div>
 
                     @if (QueryTab == "params")
                     {
                         <div class="row g-2">
                             <div class="col-md-6 border-end min-w-0">
-                                <div class="small fw-semibold mb-2">Capability search params</div>
+                                <div class="small fw-semibold mb-2">@Lang.Strings.CapabilitySearchParams</div>
                                 <select class="form-select form-select-sm" size="14"
                                         style="min-height:240px;line-height:1.2;padding-top:0.15rem;padding-bottom:0.15rem"
                                         @bind="SelectedCapabilitySearchParamName"
@@ -170,7 +185,7 @@
 
         <div class="col-xl-3">
             <div class="card shadow-sm mb-2">
-                <div class="card-header py-2 small fw-semibold">Draft query lines</div>
+                <div class="card-header py-2 small fw-semibold">@Lang.Strings.CardDraftQueryLines</div>
                 <div class="card-body p-2">
                     @if (Vm.DraftSearchParameters.Count > 0)
                     {
@@ -184,13 +199,13 @@
                     }
                     else
                     {
-                        <p class="small text-muted mb-2">（尚無 draft 行）</p>
+                        <p class="small text-muted mb-2">@Lang.Strings.NoDraftLines</p>
                     }
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                                @onclick="@RemoveDraft">Remove selected</button>
+                                @onclick="@RemoveDraft">@Lang.Strings.RemoveSelected</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                                @onclick="@ClearDraft">Clear all</button>
+                                @onclick="@ClearDraft">@Lang.Strings.ClearAll</button>
                     </div>
                 </div>
             </div>
@@ -198,9 +213,9 @@
                 <div class="card-header py-2">
                     <div class="btn-group btn-group-sm w-100" role="group">
                         <button type="button" class="btn @(IncTab == "inc" ? "btn-secondary" : "btn-outline-secondary")"
-                                @onclick="@(() => IncTab = "inc")">_include</button>
+                                @onclick="@(() => IncTab = "inc")">@Lang.Strings.TabInclude</button>
                         <button type="button" class="btn @(IncTab == "rev" ? "btn-secondary" : "btn-outline-secondary")"
-                                @onclick="@(() => IncTab = "rev")">_revinclude</button>
+                                @onclick="@(() => IncTab = "rev")">@Lang.Strings.TabRevInclude</button>
                     </div>
                 </div>
                 <div class="card-body p-2 small" style="max-height:280px; overflow-y:auto">
@@ -208,7 +223,7 @@
                     {
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="incAll" @bind="Vm.IncludeTakeAll" />
-                            <label class="form-check-label" for="incAll">Emit every listed path</label>
+                            <label class="form-check-label" for="incAll">@Lang.Strings.EmitEveryListedPath</label>
                         </div>
                         @foreach (var row in Vm.IncludeChoices)
                         {
@@ -224,7 +239,7 @@
                     {
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="revAll" @bind="Vm.RevIncludeTakeAll" />
-                            <label class="form-check-label" for="revAll">Emit every listed path</label>
+                            <label class="form-check-label" for="revAll">@Lang.Strings.EmitEveryListedPath</label>
                         </div>
                         @foreach (var row in Vm.RevIncludeChoices)
                         {
@@ -242,7 +257,7 @@
 
         <div class="col-xl-4">
             <div class="card shadow-sm h-100">
-                <div class="card-header py-2 small fw-semibold">Result</div>
+                <div class="card-header py-2 small fw-semibold">@Lang.Strings.CardResult</div>
                 <div class="card-body p-2 d-flex flex-column" style="min-height:320px">
                     @if (Vm.ShowQueryResultAsTree)
                     {
@@ -253,7 +268,7 @@
                                 </ChildContent>
                                 <ErrorContent>
                                     <div class="alert alert-danger small mb-0">
-                                        樹狀顯示發生錯誤（JSON 可能過大或過深）。請改用「Message view」檢視原始文字。
+                                        @Lang.Strings.TreeViewError
                                     </div>
                                 </ErrorContent>
                             </ErrorBoundary>
@@ -262,15 +277,15 @@
                     else
                     {
                         <textarea class="form-control flex-grow-1 font-monospace small" rows="14"
-                                  placeholder="JSON" @bind="Vm.QueryResult"></textarea>
+                                  placeholder="@Lang.Strings.JsonPlaceholder" @bind="Vm.QueryResult"></textarea>
                     }
                     <div class="d-flex flex-wrap gap-2 mt-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@CopyResultAsync">Copy</button>
+                                @onclick="@CopyResultAsync">@Lang.Strings.Copy</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@SaveResultAsync">Save…</button>
+                                @onclick="@SaveResultAsync">@Lang.Strings.Save</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
-                                @onclick="@ClearResult">Clear</button>
+                                @onclick="@ClearResult">@Lang.Strings.Clear</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@Vm.IsLoading"
                                 @onclick="@ToggleTree">@Vm.ResultViewToggleLabel</button>
                     </div>
@@ -320,6 +335,12 @@
     }
 
     public void Dispose() => _binder?.Dispose();
+
+    private async Task OnUiLanguageChangedAsync(ChangeEventArgs e)
+    {
+        Lang.SetCulture(e.Value?.ToString());
+        await Lang.PersistToBrowserAsync(Js).ConfigureAwait(false);
+    }
 
     private void SetIncludeRow(Fhir.QueryBuilder.Models.SelectableIncludeRow row, ChangeEventArgs e)
     {

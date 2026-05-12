@@ -1,19 +1,20 @@
 @using Fhir.QueryBuilder.AdvancedSearch
 @inject MainViewModel Vm
+@inject QueryBuilderUiLanguageService Lang
 
 <div class="small">
-    <div class="fw-semibold mb-2">Chain parameters</div>
+    <div class="fw-semibold mb-2">@Lang.Strings.ChainParameters</div>
     <div class="row g-2 mb-2">
         <div class="col-md-5">
-            <input class="form-control form-control-sm" placeholder="path (e.g. patient.name)"
+            <input class="form-control form-control-sm" placeholder="@Lang.Strings.PathPlaceholderChain"
                    @bind="Vm.Advanced.PendingChainPath" @bind:event="oninput" />
         </div>
         <div class="col-md-5">
-            <input class="form-control form-control-sm" placeholder="value"
+            <input class="form-control form-control-sm" placeholder="@Lang.Strings.Value"
                    @bind="Vm.Advanced.PendingChainValue" @bind:event="oninput" />
         </div>
         <div class="col-md-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedChainCommand.Execute(null))">Add</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedChainCommand.Execute(null))">@Lang.Strings.Add</button>
         </div>
     </div>
     <select class="form-select form-select-sm mb-4" size="4">
@@ -25,18 +26,18 @@
 
     <hr />
 
-    <div class="fw-semibold mb-2">Composite parameters</div>
+    <div class="fw-semibold mb-2">@Lang.Strings.CompositeParameters</div>
     <div class="row g-2 mb-2">
         <div class="col-md-5">
-            <input class="form-control form-control-sm" placeholder="parameter name"
+            <input class="form-control form-control-sm" placeholder="@Lang.Strings.ParameterNamePlaceholder"
                    @bind="Vm.Advanced.PendingCompositeName" @bind:event="oninput" />
         </div>
         <div class="col-md-5">
-            <input class="form-control form-control-sm" placeholder="components (comma-separated)"
+            <input class="form-control form-control-sm" placeholder="@Lang.Strings.ComponentsCommaPlaceholder"
                    @bind="Vm.Advanced.PendingCompositeComponents" @bind:event="oninput" />
         </div>
         <div class="col-md-2">
-            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedCompositeCommand.Execute(null))">Add</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100" @onclick="@(() => Vm.TryAddAdvancedCompositeCommand.Execute(null))">@Lang.Strings.Add</button>
         </div>
     </div>
     <select class="form-select form-select-sm mb-4" size="4">
@@ -48,11 +49,11 @@
 
     <hr />
 
-    <div class="fw-semibold mb-2">_filter expressions</div>
+    <div class="fw-semibold mb-2">@Lang.Strings.FilterExpressions</div>
     <div class="input-group input-group-sm mb-2">
-        <input class="form-control" placeholder="FHIR filter expression"
+        <input class="form-control" placeholder="@Lang.Strings.FhirFilterPlaceholder"
                @bind="Vm.Advanced.PendingFilterExpression" @bind:event="oninput" />
-        <button type="button" class="btn btn-outline-secondary" @onclick="@(() => Vm.TryAddAdvancedFilterCommand.Execute(null))">Add</button>
+        <button type="button" class="btn btn-outline-secondary" @onclick="@(() => Vm.TryAddAdvancedFilterCommand.Execute(null))">@Lang.Strings.Add</button>
     </div>
     <select class="form-select form-select-sm mb-4" size="4">
         @foreach (var f in Vm.Advanced.Filters)
@@ -63,7 +64,7 @@
 
     <hr />
 
-    <div class="fw-semibold mb-3">Result control (_count, _offset, _total, _summary, _elements)</div>
+    <div class="fw-semibold mb-3">@Lang.Strings.ResultControl</div>
     <div class="row g-2 mb-2">
         <label class="col-sm-3 col-form-label py-0">_count</label>
         <div class="col-sm-9">
@@ -93,10 +94,10 @@
         </div>
         <label class="col-sm-3 col-form-label pt-0">_elements</label>
         <div class="col-sm-9">
-            <textarea class="form-control form-control-sm" rows="3" placeholder="comma-separated element names"
+            <textarea class="form-control form-control-sm" rows="3" placeholder="@Lang.Strings.ResultElementsCsvPlaceholder"
                       @bind="Vm.Advanced.ResultElementsCsv"></textarea>
         </div>
     </div>
 
-    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="@(() => Vm.ClearAdvancedSearchCommand.Execute(null))">Clear advanced</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="@(() => Vm.ClearAdvancedSearchCommand.Execute(null))">@Lang.Strings.ClearAdvanced</button>
 </div>

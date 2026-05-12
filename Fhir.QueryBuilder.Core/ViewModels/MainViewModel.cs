@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fhir.QueryBuilder.AdvancedSearch;
 using Fhir.QueryBuilder.Configuration;
+using Fhir.QueryBuilder.Localization;
 using Fhir.QueryBuilder.Metadata;
 using Fhir.QueryBuilder.Models;
 using Fhir.QueryBuilder.Platform;
@@ -29,6 +30,7 @@ public partial class MainViewModel : ObservableObject
     private readonly QueryBuilderAppSettings _options;
     private readonly ITokenServer _tokenServer;
     private readonly ICapabilityContext _capabilityContext;
+    private readonly QueryBuilderUiLanguageService _uiLang;
     private readonly IClipboardTextService? _clipboardText;
     private readonly IFilePickerSaveTextService? _filePickerSave;
     private readonly IExternalUriLauncher? _externalUriLauncher;
@@ -155,7 +157,14 @@ public partial class MainViewModel : ObservableObject
     private bool _showQueryResultAsTree;
 
     /// <summary>結果區切換按鈕標題（Tree view ↔ Message view）。</summary>
-    public string ResultViewToggleLabel => ShowQueryResultAsTree ? "Message view" : "Tree view";
+    public string ResultViewToggleLabel =>
+        ShowQueryResultAsTree ? _uiLang.Strings.ResultViewMessage : _uiLang.Strings.ResultViewTree;
+
+    /// <summary>目前 UI 語系字串表（Blazor／Avalonia 綁定）。</summary>
+    public QueryBuilderUiStrings UiStrings => _uiLang.Strings;
+
+    /// <summary>頁尾版權列（含年份）。</summary>
+    public string FooterCopyrightText => string.Format(_uiLang.Strings.CopyrightLineFormat, DateTime.Now.Year);
 
     [ObservableProperty]
     private bool _editorStringVisible;
@@ -226,6 +235,7 @@ public partial class MainViewModel : ObservableObject
         IOptions<QueryBuilderAppSettings> options,
         ITokenServer tokenServer,
         ICapabilityContext capabilityContext,
+        QueryBuilderUiLanguageService uiLang,
         IClipboardTextService? clipboardText = null,
         IFilePickerSaveTextService? filePickerSave = null,
         IExternalUriLauncher? externalUriLauncher = null)
@@ -239,6 +249,7 @@ public partial class MainViewModel : ObservableObject
         _options = options.Value;
         _tokenServer = tokenServer;
         _capabilityContext = capabilityContext;
+        _uiLang = uiLang;
         _clipboardText = clipboardText;
         _filePickerSave = filePickerSave;
         _externalUriLauncher = externalUriLauncher;
@@ -272,6 +283,16 @@ public partial class MainViewModel : ObservableObject
 
         ValidationErrors.CollectionChanged += (_, _) =>
             OnPropertyChanged(nameof(HasValidationErrors));
+
+        _uiLang.Changed += OnUiLanguageServiceChanged;
+    }
+
+    private void OnUiLanguageServiceChanged()
+    {
+        OnPropertyChanged(nameof(UiStrings));
+        OnPropertyChanged(nameof(ResultViewToggleLabel));
+        OnPropertyChanged(nameof(SmartPatientSummary));
+        OnPropertyChanged(nameof(FooterCopyrightText));
     }
 
     /// <summary>由主視窗於首次顯示時呼叫，避免 async 接續在非 UI 執行緒更新 <see cref="SupportedResources"/> 等集合。</summary>
@@ -484,7 +505,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>非空時顯示 patient context 摘要（供 Avalonia 綁定）。</summary>
     public string SmartPatientSummary =>
-        string.IsNullOrWhiteSpace(SmartSessionPatient) ? "" : $"SMART patient context: {SmartSessionPatient.Trim()}";
+        string.IsNullOrWhiteSpace(SmartSessionPatient)
+            ? ""
+            : string.Format(_uiLang.Strings.SmartPatientContextFormat, SmartSessionPatient.Trim());
 
     partial void OnSmartSessionPatientChanged(string value) =>
         OnPropertyChanged(nameof(SmartPatientSummary));

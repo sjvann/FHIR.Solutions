@@ -1,8 +1,10 @@
-﻿<div class="nav-scrollable">
+﻿@inject QueryBuilderUiLanguageService Lang
+
+<div class="nav-scrollable">
     <nav class="flex-column">
         <div class="nav-item px-3 py-3 d-flex align-items-center gap-2 border-bottom">
             <img src="icons/query-builder-icon.svg" width="36" height="36" alt="" class="flex-shrink-0" />
-            <span class="fw-semibold small">FHIR Query Builder</span>
+            <span class="fw-semibold small">@Lang.Strings.AppTitleShort</span>
         </div>
     </nav>
 </div>

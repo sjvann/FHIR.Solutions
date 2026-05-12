@@ -1,6 +1,7 @@
 @page "/admin/import"
 @rendermode @(new InteractiveServerRenderMode())
 @inject TerminologyOrchestrator Orchestrator
+@inject Microsoft.Extensions.Options.IOptions<Fhir.Terminology.Core.TerminologyServerOptions> TerminologyOptions
 @implements IDisposable
 
 <style>
@@ -28,8 +29,11 @@
 <h2>匯入術語資源</h2>
 
 <p style="max-width:820px;line-height:1.6;">
-    將符合 FHIR R5 的 <strong>CodeSystem</strong>／<strong>ValueSet</strong>／<strong>ConceptMap</strong> 以 <strong>JSON</strong> 寫入本機 SQLite。
+    將 <strong>CodeSystem</strong>／<strong>ValueSet</strong>／<strong>ConceptMap</strong>／<strong>StructureDefinition</strong> 以 <strong>JSON</strong> 寫入本機 SQLite（請選擇<strong>規格版本</strong>以便與 R4／R5／R6 並存辨識）。
     巨型詞表（完整 LOINC／SNOMED）通常改採<strong>上游委派</strong>或分批匯入；此頁適合測試資料、小型詞表與手動維護資源。
+</p>
+<p style="max-width:820px;line-height:1.65;color:#444;font-size:0.95rem;">
+    HL7 FHIR 規格發行檔中，<code>valuesets.json</code>、<code>conceptmaps.json</code>、<code>profiles-resources.json</code>（多為 StructureDefinition）常為<strong>不同檔案</strong>；根節點為 <code>Bundle</code> 時會自動依 <code>entry.resource.resourceType</code> 擷取（可不選下拉類別）。另見 <a href="/admin/bindings">Binding 查詢頁</a>。
 </p>
 
 <section style="margin:16px 0;padding:12px;border:1px solid #ccc;border-radius:6px;background:#fafafa;max-width:820px;">
@@ -42,11 +46,25 @@
 </section>
 
 <div style="margin:16px 0;max-width:720px;">
-    <label for="rt"><strong>資源類型（須與 JSON 內 <code>resourceType</code> 一致）</strong></label>
+    <label for="rt"><strong>資源類型（單筆 JSON 須一致；根節點為 <code>Bundle</code> 時會匯入其中支援型別，可不選對應型別）</strong></label>
     <select id="rt" style="display:block;margin-top:6px;padding:6px 10px;min-width:220px;" @bind="_resourceType">
         <option value="CodeSystem">CodeSystem</option>
         <option value="ValueSet">ValueSet</option>
         <option value="ConceptMap">ConceptMap</option>
+        <option value="StructureDefinition">StructureDefinition</option>
+    </select>
+</div>
+
+<div style="margin:16px 0;max-width:720px;">
+    <label for="fsv"><strong>FHIR 規格版本（存入資料庫之 <code>FhirSpecVersion</code>；空白＝組態預設，目前為 <code>@_effectiveDefaultImportFv</code>）</strong></label>
+    <select id="fsv" style="display:block;margin-top:6px;padding:6px 10px;min-width:280px;" @bind="_importFhirSpecVersionQuery">
+        <option value="">（依組態預設）</option>
+        <option value="4.0.1">4.0.1（R4）</option>
+        <option value="5.0.0">5.0.0（R5）</option>
+        <option value="6.0.0">6.0.0（R6）</option>
+        <option value="R4">R4 → 正規化為 4.0.1</option>
+        <option value="R5">R5 → 正規化為 5.0.0</option>
+        <option value="R6">R6 → 正規化為 6.0.0</option>
     </select>
 </div>
 
@@ -110,6 +128,8 @@
 
 @code {
     private string _resourceType = "CodeSystem";
+    private string _importFhirSpecVersionQuery = "";
+    private string _effectiveDefaultImportFv = "";
     private string _jsonBody = "";
     private bool _busy;
     private string? _successMessage;
@@ -120,6 +140,11 @@
     private CancellationTokenSource? _importCts;
 
     private const long MaxUploadBytes = 100L * 1024 * 1024;
+
+    protected override void OnInitialized()
+    {
+        _effectiveDefaultImportFv = TerminologyOptions.Value.GetEffectiveDefaultImportFhirSpecVersion();
+    }
 
     private static string SampleCodeSystem =>
         """
@@ -179,12 +204,38 @@
         }
         """;
 
+    private static string SampleStructureDefinition =>
+        """
+        {
+          "resourceType": "StructureDefinition",
+          "id": "example-local-sd-min",
+          "url": "http://example.org/fhir/StructureDefinition/example-local-sd-min",
+          "name": "ExampleLocalSdMin",
+          "status": "draft",
+          "kind": "resource",
+          "abstract": false,
+          "type": "Patient",
+          "snapshot": {
+            "element": [
+              {
+                "path": "Patient.gender",
+                "binding": {
+                  "strength": "required",
+                  "valueSet": "http://hl7.org/fhir/ValueSet/administrative-gender"
+                }
+              }
+            ]
+          }
+        }
+        """;
+
     private Task LoadSampleAsync()
     {
         _jsonBody = _resourceType switch
         {
             "ValueSet" => SampleValueSet,
             "ConceptMap" => SampleConceptMap,
+            "StructureDefinition" => SampleStructureDefinition,
             _ => SampleCodeSystem,
         };
         ClearMessages();
@@ -267,10 +318,21 @@
             _progressMessage = $"正在建立 {_resourceType}（解析與持久化）…";
             await InvokeAsync(StateHasChanged);
 
-            var result = await Orchestrator.CreateAsync(_resourceType, json, ct);
+            var importFv = string.IsNullOrWhiteSpace(_importFhirSpecVersionQuery) ? null : _importFhirSpecVersionQuery.Trim();
+            var result = await Orchestrator.ImportFromAdminPageAsync(_resourceType, json, importFv, ct);
             if (result.HttpStatus == 201)
             {
                 _successMessage = $"已成功建立 {_resourceType}（HTTP 201 Created）。可至資源列表確認，或繼續匯入下一筆。";
+                _successLink = "/admin/resources";
+                return;
+            }
+
+            if (result.HttpStatus == 200)
+            {
+                var batchHint = TerminologyImportOutcome.TryGetDiagnostics(result.JsonBody);
+                _successMessage = string.IsNullOrEmpty(batchHint)
+                    ? "批次匯入完成（HTTP 200）。可至資源列表確認。"
+                    : batchHint;
                 _successLink = "/admin/resources";
                 return;
             }

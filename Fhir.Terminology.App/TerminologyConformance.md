@@ -16,3 +16,9 @@
 | FHIR Binding 登錄 | 表 `BindingRegistry` + REST／Blazor | — | 依 StructureDefinition + path 選 ValueSet 再驗證 |
 
 **解析順序**：對 `$lookup`／`$validate-code`／`$subsumes`／`$translate`／本機可算的 `$expand`，優先使用 **SQLite 本機**；僅在資源不存在於本機、或本機無法滿足（例如 ConceptMap 無對應）時再 **HTTP 委派**至已設定之上游。
+
+## THO 套件、種子與效能
+
+- **批量更新**：建議以 FHIR NPM 套件 `hl7.terminology`（`.tgz`）匯入；CLI 專案 `Fhir.Terminology.PackageImporter` 會將 `package/` 內之 CodeSystem／ValueSet／ConceptMap 寫入 SQLite，並記錄於表 `TerminologyPackageImports`。官方瀏覽索引對照 URL 見程式碼 `ThoCatalogUrls`（codesystems／valuesets／external_code_systems 三頁）。
+- **種子**：組態 `Terminology:AutoSkipCanonicalAndInternalStubsWhenPackageImportExists` 為 true 且資料庫已有套件匯入紀錄時，會跳過外部 canonical 與 internal FHIR slug 之 stub 種子，避免覆寫 THO 完整資源。
+- **效能**：巨型 CodeSystem 鏡像後，`$lookup` 與依 compose 之 `$expand` 仍透過 `CodeSystemCodeIndex` 於載入時解析整份 JSON；若延遲過高，可另行評估離線 **概念列索引表**（未來遷移／優化項）。

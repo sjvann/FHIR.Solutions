@@ -2,10 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using FluentAssertions;
-using Fhir.QueryBuilder.Common;
 using Fhir.QueryBuilder.Extensions;
 using Fhir.QueryBuilder.Services.Interfaces;
 using Fhir.QueryBuilder.QueryCore;
+using Fhir.VersionManager;
 
 namespace Fhir.QueryBuilder.Tests.Integration
 {

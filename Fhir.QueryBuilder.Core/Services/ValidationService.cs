@@ -12,7 +12,7 @@ namespace Fhir.QueryBuilder.Services
         private static readonly Regex UrlRegex = new(@"^https?://[^\s/$.?#].[^\s]*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex FhirDateRegex = new(@"^\d{4}(-\d{2}(-\d{2})?)?$", RegexOptions.Compiled);
         private static readonly Regex FhirDateTimeRegex = new(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?(Z|[+-]\d{2}:\d{2})$", RegexOptions.Compiled);
-        private static readonly string[] SupportedFhirVersions = { "R4", "R5" };
+        private static readonly string[] SupportedFhirVersions = { "R4", "R4B", "R5" };
 
         public ValidationService(ILogger<ValidationService> logger, IHttpClientFactory httpClientFactory)
         {

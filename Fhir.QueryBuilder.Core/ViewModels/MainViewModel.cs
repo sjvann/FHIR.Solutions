@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fhir.QueryBuilder.AdvancedSearch;
 using Fhir.QueryBuilder.Configuration;
+using Fhir.QueryBuilder.Metadata;
 using Fhir.QueryBuilder.Models;
 using Fhir.QueryBuilder.Platform;
 using Fhir.QueryBuilder.QueryBuilders.FluentApi;
@@ -27,6 +28,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ILogger<MainViewModel> _logger;
     private readonly QueryBuilderAppSettings _options;
     private readonly ITokenServer _tokenServer;
+    private readonly ICapabilityContext _capabilityContext;
     private readonly IClipboardTextService? _clipboardText;
     private readonly IFilePickerSaveTextService? _filePickerSave;
     private readonly IExternalUriLauncher? _externalUriLauncher;
@@ -116,6 +118,18 @@ public partial class MainViewModel : ObservableObject
     /// <summary>SMART OAuth authorize endpoint（若伺服器／服務實作回傳）。</summary>
     [ObservableProperty]
     private string _authorizeUrl = "";
+
+    /// <summary>下拉選項：R4、R4B、R5（宣告／偏好線別）。</summary>
+    public ObservableCollection<string> FhirVersionChoices { get; } = new() { "R4", "R4B", "R5" };
+
+    [ObservableProperty]
+    private string _selectedFhirVersionShort = "R5";
+
+    [ObservableProperty]
+    private string _detectedFhirVersionDisplay = "—";
+
+    [ObservableProperty]
+    private string _activeFhirVersionDisplay = "—";
 
     /// <summary>SMART 登入後 token 回應中的 patient（若有）。</summary>
     [ObservableProperty]
@@ -211,6 +225,7 @@ public partial class MainViewModel : ObservableObject
         ILogger<MainViewModel> logger,
         IOptions<QueryBuilderAppSettings> options,
         ITokenServer tokenServer,
+        ICapabilityContext capabilityContext,
         IClipboardTextService? clipboardText = null,
         IFilePickerSaveTextService? filePickerSave = null,
         IExternalUriLauncher? externalUriLauncher = null)
@@ -223,6 +238,7 @@ public partial class MainViewModel : ObservableObject
         _logger = logger;
         _options = options.Value;
         _tokenServer = tokenServer;
+        _capabilityContext = capabilityContext;
         _clipboardText = clipboardText;
         _filePickerSave = filePickerSave;
         _externalUriLauncher = externalUriLauncher;
@@ -230,6 +246,15 @@ public partial class MainViewModel : ObservableObject
         ServerUrl = _options.DefaultServerUrl;
         SmartClientId = _options.Smart.ClientId;
         SmartScopes = _options.Smart.DefaultScopes;
+
+        var v = string.IsNullOrWhiteSpace(_options.DefaultFhirVersion) ? "R5" : _options.DefaultFhirVersion.Trim();
+        SelectedFhirVersionShort = v.ToUpperInvariant() switch
+        {
+            "R4" => "R4",
+            "R4B" => "R4B",
+            "R5" => "R5",
+            _ => "R5"
+        };
 
         _errorHandlingService.ErrorOccurred += OnErrorOccurred;
         _progressService.ProgressChanged += OnProgressChanged;
@@ -262,7 +287,9 @@ public partial class MainViewModel : ObservableObject
 
     private Task RunOnUiAsync(Action action)
     {
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // 勿使用 RunContinuationsAsynchronously：TrySetResult 後 await 的接續會排到執行緒集區，
+        // 後續 Observable 屬性更新會觸發 Avalonia「Call from invalid thread」。
+        var tcs = new TaskCompletionSource();
         void Run()
         {
             try
@@ -545,16 +572,31 @@ public partial class MainViewModel : ObservableObject
             }
 
             _progressService.UpdateProgress(operationId, "Connecting to server...", 50);
-            var capability = await _fhirQueryService.ConnectToServerAsync(ServerUrl, _cancellationTokenSource.Token);
+            var declared = FhirVersionParser.ParseFromShortName(SelectedFhirVersionShort);
+            var capability = await _fhirQueryService.ConnectToServerAsync(ServerUrl, _cancellationTokenSource.Token,
+                declared == FhirVersion.Unknown ? null : declared);
 
             if (capability != null)
             {
-                IsConnected = true;
+                // 遠端 HTTP await 鏈可能不帶 UI SynchronizationContext；Observable 一律在 UI 執行緒更新。
+                var supportOAuth = _fhirQueryService.SupportOAuth;
+                var tokenUrl = _fhirQueryService.TokenUrl ?? "";
+                var authorizeUrl = _fhirQueryService.AuthorizeUrl ?? "";
 
-                SupportOAuth = _fhirQueryService.SupportOAuth;
-                TokenUrl = _fhirQueryService.TokenUrl ?? "";
-                AuthorizeUrl = _fhirQueryService.AuthorizeUrl ?? "";
-                NotifySmartCommands();
+                await RunOnUiAsync(() =>
+                {
+                    IsConnected = true;
+                    DetectedFhirVersionDisplay = FhirVersionParser.ToShortName(_capabilityContext.DetectedFhirVersion);
+                    ActiveFhirVersionDisplay = FhirVersionParser.ToShortName(_capabilityContext.SelectedFhirVersion);
+                    SupportOAuth = supportOAuth;
+                    TokenUrl = tokenUrl;
+                    AuthorizeUrl = authorizeUrl;
+                    NotifySmartCommands();
+                });
+
+                if (!string.IsNullOrEmpty(_capabilityContext.VersionMismatchWarning))
+                    _errorHandlingService.HandleError(_capabilityContext.VersionMismatchWarning, ErrorSeverity.Warning,
+                        "FHIR version");
 
                 _progressService.UpdateProgress(operationId, "Loading supported resources...", 75);
                 await LoadSupportedResourcesAsync();
@@ -564,7 +606,10 @@ public partial class MainViewModel : ObservableObject
             }
             else
             {
-                IsConnected = false;
+                await RunOnUiAsync(() =>
+                {
+                    IsConnected = false;
+                });
                 _progressService.FailOperation(operationId, new InvalidOperationException("Failed to retrieve server capability statement"));
             }
         }
@@ -576,7 +621,10 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to connect to server: {ServerUrl}", ServerUrl);
-            IsConnected = false;
+            await RunOnUiAsync(() =>
+            {
+                IsConnected = false;
+            });
             _progressService.FailOperation(operationId, ex, $"Connection failed: {ex.Message}");
             _errorHandlingService.HandleError(ex, "ConnectToServer", new Dictionary<string, object> { { "ServerUrl", ServerUrl } });
         }
@@ -1086,7 +1134,7 @@ public partial class MainViewModel : ObservableObject
                     if (ShowQueryResultAsTree)
                         QueryResultTreeRoots.Clear();
                 }
-            }).ConfigureAwait(false);
+            });
 
             if (!string.IsNullOrEmpty(result))
             {
@@ -1241,6 +1289,25 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnTokenUrlChanged(string value) => CopyTokenUrlCommand.NotifyCanExecuteChanged();
 
+    partial void OnSelectedFhirVersionShortChanged(string value)
+    {
+        if (!IsConnected)
+            return;
+        _fhirQueryService.Disconnect();
+        RunOnUi(() =>
+        {
+            IsConnected = false;
+            SupportedResources.Clear();
+            SearchParameters.Clear();
+            SearchIncludes.Clear();
+            SearchRevIncludes.Clear();
+            IncludeChoices.Clear();
+            RevIncludeChoices.Clear();
+            SelectedResource = string.Empty;
+            StatusMessage = "FHIR 宣告版本已變更；請重新連線。";
+        });
+    }
+
     [RelayCommand]
     private void OpenAuthorizeUrl()
     {
@@ -1286,7 +1353,7 @@ public partial class MainViewModel : ObservableObject
             SupportedResources.Clear();
             foreach (var resource in ordered)
                 SupportedResources.Add(resource);
-        }).ConfigureAwait(false);
+        });
     }
 
     private async Task LoadSearchParametersAsync(string resourceName)
@@ -1301,7 +1368,7 @@ public partial class MainViewModel : ObservableObject
             SearchParameters.Clear();
             foreach (var param in list)
                 SearchParameters.Add(param);
-        }).ConfigureAwait(false);
+        });
     }
 
     private async Task LoadSearchIncludesAsync(string resourceName)
@@ -1320,7 +1387,7 @@ public partial class MainViewModel : ObservableObject
                 SearchIncludes.Add(include);
                 IncludeChoices.Add(new SelectableIncludeRow(include));
             }
-        }).ConfigureAwait(false);
+        });
     }
 
     private async Task LoadSearchRevIncludesAsync(string resourceName)
@@ -1339,7 +1406,7 @@ public partial class MainViewModel : ObservableObject
                 SearchRevIncludes.Add(revInclude);
                 RevIncludeChoices.Add(new SelectableIncludeRow(revInclude));
             }
-        }).ConfigureAwait(false);
+        });
     }
 
     public void AddQueryParameter(string parameter)

@@ -1,12 +1,14 @@
 @page "/admin/resources"
 @rendermode @(new InteractiveServerRenderMode())
 @inject ITerminologyRepository Repository
+@inject NavigationManager Navigation
 
 <h2>術語資源（SQLite）</h2>
 
 <p style="max-width:780px;line-height:1.65;">
-    此處列出<strong>已寫入本機資料庫</strong>的 <code>CodeSystem</code>／<code>ValueSet</code>／<code>ConceptMap</code> 摘要（型別、邏輯 Id、canonical Url、版本）。
+    此處列出<strong>已寫入本機資料庫</strong>的 <code>CodeSystem</code>／<code>ValueSet</code>／<code>ConceptMap</code>／<code>StructureDefinition</code> 摘要（型別、邏輯 Id、canonical Url、business 版本、FHIR 規格版本）。
     若要<strong>新增或批次匯入</strong>，請使用 <a href="/admin/import"><strong>匯入資源</strong></a> 頁面貼上／上傳 FHIR JSON，或使用 Scalar 發送 <code>POST /fhir/…</code>。
+    <strong>GET</strong> 另開視窗顯示原始 JSON；<strong>VIEW</strong> 於本站以摘要／表格檢視同一筆資源（仍可展開完整 JSON）。
 </p>
 
 @if (_loadError is not null)
@@ -38,11 +40,12 @@ else
                     <option value="CodeSystem">CodeSystem</option>
                     <option value="ValueSet">ValueSet</option>
                     <option value="ConceptMap">ConceptMap</option>
+                    <option value="StructureDefinition">StructureDefinition</option>
                 </select>
             </div>
             <div style="flex:1;min-width:200px;max-width:420px;">
-                <label for="q" style="display:block;font-weight:600;margin-bottom:4px;">搜尋（Id／Url／Name／Title 包含即可）</label>
-                <input id="q" type="search" style="width:100%;padding:6px 10px;box-sizing:border-box;" placeholder="例如 loinc、internal-fhir、demo-" @bind="_searchText" @bind:event="oninput" @onkeydown="OnSearchKeyDown" />
+                <label for="q" style="display:block;font-weight:600;margin-bottom:4px;">搜尋（Id／Url／Name／Title／FHIR 規格版本 包含即可）</label>
+                <input id="q" type="search" style="width:100%;padding:6px 10px;box-sizing:border-box;" placeholder="例如 loinc、5.0.0、demo-" @bind="_searchText" @bind:event="oninput" @onkeydown="OnSearchKeyDown" />
             </div>
             <div style="display:flex;gap:8px;padding-bottom:2px;">
                 <button type="button" style="padding:6px 14px;border:1px solid #0d6efd;background:#0d6efd;color:#fff;border-radius:4px;cursor:pointer;" @onclick="ApplySearch">套用</button>
@@ -68,7 +71,9 @@ else
                     <th style="padding:8px;border:1px solid #ccc;text-align:left;">Id</th>
                     <th style="padding:8px;border:1px solid #ccc;text-align:left;">Url</th>
                     <th style="padding:8px;border:1px solid #ccc;text-align:left;">Version</th>
-                    <th style="padding:8px;border:1px solid #ccc;text-align:left;width:110px;">REST</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;">FHIR spec</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;width:72px;">GET</th>
+                    <th style="padding:8px;border:1px solid #ccc;text-align:left;width:72px;">VIEW</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -79,8 +84,12 @@ else
                         <td style="padding:8px;border:1px solid #ccc;"><code>@r.LogicalId</code></td>
                         <td style="padding:8px;border:1px solid #ccc;word-break:break-all;">@(r.Url ?? "—")</td>
                         <td style="padding:8px;border:1px solid #ccc;">@(r.Version ?? "—")</td>
+                        <td style="padding:8px;border:1px solid #ccc;"><code>@r.FhirSpecVersion</code></td>
                         <td style="padding:8px;border:1px solid #ccc;font-size:0.85rem;">
-                            <a href="@($"/fhir/{r.ResourceType}/{r.LogicalId}")" target="_blank" rel="noopener noreferrer">GET</a>
+                            <a href="@RestJsonHref(r)" target="_blank" rel="noopener noreferrer">GET</a>
+                        </td>
+                        <td style="padding:8px;border:1px solid #ccc;font-size:0.85rem;">
+                            <a href="@AdminViewHref(r)">VIEW</a>
                         </td>
                     </tr>
                 }
@@ -128,7 +137,8 @@ else
             var cs = await Repository.SearchAsync("CodeSystem", new TerminologySearchParameters());
             var vs = await Repository.SearchAsync("ValueSet", new TerminologySearchParameters());
             var cm = await Repository.SearchAsync("ConceptMap", new TerminologySearchParameters());
-            _allRows = cs.Concat(vs).Concat(cm).ToList();
+            var sd = await Repository.SearchAsync("StructureDefinition", new TerminologySearchParameters());
+            _allRows = cs.Concat(vs).Concat(cm).Concat(sd).ToList();
             RebuildFiltered(resetPage: true);
         }
         catch (Exception ex)
@@ -197,7 +207,8 @@ else
                 ContainsIgnoreCase(r.LogicalId, term) ||
                 ContainsIgnoreCase(r.Url, term) ||
                 ContainsIgnoreCase(r.Name, term) ||
-                ContainsIgnoreCase(r.Title, term));
+                ContainsIgnoreCase(r.Title, term) ||
+                ContainsIgnoreCase(r.FhirSpecVersion, term));
         }
 
         _filtered = q
@@ -217,6 +228,18 @@ else
 
     private static bool ContainsIgnoreCase(string? value, string needle)
         => value is not null && value.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    private string RestJsonHref(StoredResourceRow r)
+    {
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        return $"{origin}/fhir/{Uri.EscapeDataString(r.ResourceType)}/{Uri.EscapeDataString(r.LogicalId)}?fhirSpecVersion={Uri.EscapeDataString(r.FhirSpecVersion)}";
+    }
+
+    private string AdminViewHref(StoredResourceRow r)
+    {
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        return $"{origin}/admin/resources/view/{Uri.EscapeDataString(r.ResourceType)}/{Uri.EscapeDataString(r.LogicalId)}?fhirSpecVersion={Uri.EscapeDataString(r.FhirSpecVersion)}";
+    }
 
     private void SlicePage()
     {

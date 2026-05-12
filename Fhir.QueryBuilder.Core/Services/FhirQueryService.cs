@@ -2,11 +2,12 @@
 using System.Net.Http.Headers;
 using Fhir.Auth.TokenServer;
 using Fhir.QueryBuilder.Configuration;
+using Fhir.QueryBuilder.Extensions;
 using Fhir.QueryBuilder.Metadata;
 using Fhir.QueryBuilder.Services.Interfaces;
 using Fhir.QueryBuilder.Models;
-using Fhir.Resources.R5;
-using Fhir.TypeFramework.Serialization;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Task = System.Threading.Tasks.Task;
@@ -17,11 +18,13 @@ public sealed class FhirQueryService : IFhirQueryService
 {
     private readonly ILogger<FhirQueryService> _logger;
     private readonly QueryBuilderAppSettings _options;
+    private readonly FhirQueryBuilderOptions _fhirBuilderOptions;
     private readonly ICacheService _cacheService;
     private readonly IPerformanceService _performanceService;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICapabilityContext _capabilityContext;
     private readonly ITokenServer _tokenServer;
+    private readonly IFhirCapabilityRuntime _capabilityRuntime;
     private HttpClient? _httpClient;
     private string? _activeBaseUrl;
 
@@ -31,19 +34,23 @@ public sealed class FhirQueryService : IFhirQueryService
     public FhirQueryService(
         ILogger<FhirQueryService> logger,
         IOptions<QueryBuilderAppSettings> options,
+        FhirQueryBuilderOptions fhirBuilderOptions,
         ICacheService cacheService,
         IPerformanceService performanceService,
         IHttpClientFactory httpClientFactory,
         ICapabilityContext capabilityContext,
-        ITokenServer tokenServer)
+        ITokenServer tokenServer,
+        IFhirCapabilityRuntime capabilityRuntime)
     {
         _logger = logger;
         _options = options.Value;
+        _fhirBuilderOptions = fhirBuilderOptions;
         _cacheService = cacheService;
         _performanceService = performanceService;
         _httpClientFactory = httpClientFactory;
         _capabilityContext = capabilityContext;
         _tokenServer = tokenServer;
+        _capabilityRuntime = capabilityRuntime;
     }
 
     public bool IsConnected => _httpClient != null;
@@ -56,8 +63,9 @@ public sealed class FhirQueryService : IFhirQueryService
 
     public string? TokenUrl => _tokenServer.Configuration?.TokenEndpoint;
 
-    public async Task<CapabilityStatement?> ConnectToServerAsync(string baseUrl,
-        CancellationToken cancellationToken = default)
+    public async Task<CapabilityParseResult?> ConnectToServerAsync(string baseUrl,
+        CancellationToken cancellationToken = default,
+        FhirVersion? declaredFhirVersionOverride = null)
     {
         using var perfOperation = _performanceService.StartOperation("ConnectToServer");
 
@@ -67,23 +75,30 @@ public sealed class FhirQueryService : IFhirQueryService
 
             var normalized = baseUrl.TrimEnd('/');
             _canonicalSearchParameterTypeCache.Clear();
-            var cacheKey = $"capability_{normalized}";
+
+            var declared = declaredFhirVersionOverride
+                           ?? FhirVersionParser.ParseFromShortName(_options.DefaultFhirVersion);
+            if (declared == FhirVersion.Unknown)
+                declared = _fhirBuilderOptions.DefaultFhirVersion;
+
+            var strategy = _options.FhirVersionResolution;
+
+            var cacheKey = $"capability_{normalized}_d{(int)declared}_s{(int)strategy}";
 
             if (_options.EnableCaching)
             {
-                var cachedCapability = await _cacheService.GetAsync<CapabilityStatement>(cacheKey, cancellationToken);
-                if (cachedCapability != null)
+                var cached = await _cacheService.GetAsync<CapabilityParseResult>(cacheKey, cancellationToken);
+                if (cached != null)
                 {
-                    _logger.LogDebug("Using cached capability statement for {BaseUrl}", baseUrl);
+                    _logger.LogDebug("Using cached capability parse for {BaseUrl}", baseUrl);
                     _httpClient = _httpClientFactory.CreateClient();
                     _httpClient.Timeout = TimeSpan.FromSeconds(_options.RequestTimeoutSeconds);
                     _httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/fhir+json");
                     _activeBaseUrl = normalized;
-                    var cachedJson = FhirJsonSerializer.Serialize(cachedCapability);
-                    _capabilityContext.SetConnection(normalized, cachedCapability, cachedJson);
-                    await _tokenServer.DiscoverAsync(normalized, cachedJson, cancellationToken).ConfigureAwait(false);
+                    _capabilityContext.SetConnection(normalized, cached);
+                    await _tokenServer.DiscoverAsync(normalized, cached.Json, cancellationToken).ConfigureAwait(false);
                     perfOperation.AddCustomMetric("CacheHit", true);
-                    return cachedCapability;
+                    return cached;
                 }
             }
 
@@ -97,24 +112,24 @@ public sealed class FhirQueryService : IFhirQueryService
             response.EnsureSuccessStatusCode();
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            var capability = FhirJsonSerializer.Deserialize<CapabilityStatement>(json);
-            if (capability == null)
-                throw new InvalidOperationException("Failed to deserialize CapabilityStatement from /metadata");
+            var parse = _capabilityRuntime.ParseMetadata(json, normalized, declared, strategy);
+            if (!string.IsNullOrEmpty(parse.MismatchWarning))
+                _logger.LogWarning("{Warning}", parse.MismatchWarning);
 
-            _capabilityContext.SetConnection(normalized, capability, json);
+            _capabilityContext.SetConnection(normalized, parse);
 
             await _tokenServer.DiscoverAsync(normalized, json, cancellationToken).ConfigureAwait(false);
 
             if (_options.EnableCaching)
             {
-                await _cacheService.SetAsync(cacheKey, capability,
+                await _cacheService.SetAsync(cacheKey, parse,
                     TimeSpan.FromMinutes(_options.CacheExpirationMinutes), cancellationToken);
             }
 
             perfOperation.AddCustomMetric("CacheHit", false);
             perfOperation.AddCustomMetric("ServerUrl", baseUrl);
             _logger.LogInformation("Successfully connected to FHIR server: {BaseUrl}", baseUrl);
-            return capability;
+            return parse;
         }
         catch (Exception ex)
         {
@@ -187,10 +202,9 @@ public sealed class FhirQueryService : IFhirQueryService
 
     public Task<IEnumerable<string>?> GetSupportedResourcesAsync(CancellationToken cancellationToken = default)
     {
-        var cap = _capabilityContext.Capability;
-        var rest = SelectServerRest(cap);
-        var types = rest?.Resource?
-            .Select(r => (string?)r.Type)
+        var model = _capabilityContext.CapabilityModel;
+        var types = model?.ServerResources
+            .Select(r => r.Type)
             .Where(s => !string.IsNullOrEmpty(s))
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -214,22 +228,14 @@ public sealed class FhirQueryService : IFhirQueryService
     public Task<string[]?> GetSearchIncludeAsync(string resourceName, CancellationToken cancellationToken = default)
     {
         var rc = FindRestResource(resourceName);
-        var arr = rc?.SearchInclude?
-            .Select(s => (string?)s)
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Cast<string>()
-            .ToArray();
+        var arr = rc?.SearchIncludes.ToArray();
         return Task.FromResult(arr);
     }
 
     public Task<string[]?> GetSearchRevIncludeAsync(string resourceName, CancellationToken cancellationToken = default)
     {
         var rc = FindRestResource(resourceName);
-        var arr = rc?.SearchRevInclude?
-            .Select(s => (string?)s)
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Cast<string>()
-            .ToArray();
+        var arr = rc?.SearchRevIncludes.ToArray();
         return Task.FromResult(arr);
     }
 
@@ -237,21 +243,21 @@ public sealed class FhirQueryService : IFhirQueryService
         CancellationToken cancellationToken = default)
     {
         var rc = FindRestResource(resourceName);
-        if (rc?.SearchParam == null)
+        if (rc == null || rc.SearchParams.Count == 0)
             return Task.FromResult<IEnumerable<SearchParamModel>?>(null);
 
         var list = new List<SearchParamModel>();
-        foreach (var sp in rc.SearchParam)
+        foreach (var sp in rc.SearchParams)
         {
-            var name = (string?)sp.Name;
+            var name = sp.Name;
             if (string.IsNullOrEmpty(name))
                 continue;
 
             list.Add(new SearchParamModel
             {
                 Name = name,
-                Type = (string?)sp.Type ?? "",
-                Documentation = (string?)sp.Documentation
+                Type = sp.Type ?? "",
+                Documentation = sp.Documentation
             });
         }
 
@@ -368,14 +374,14 @@ public sealed class FhirQueryService : IFhirQueryService
         return new FhirQueryResult { IsSuccess = false, ErrorMessage = "尚未實作", StatusCode = 501 };
     }
 
-    public Task<CapabilityStatement?> GetCapabilityStatementAsync(string serverUrl,
+    public Task<CapabilityParseResult?> GetCapabilityStatementAsync(string serverUrl,
         CancellationToken cancellationToken = default)
     {
         var normalized = serverUrl.TrimEnd('/');
         if (string.Equals(normalized, _activeBaseUrl, StringComparison.OrdinalIgnoreCase))
-            return Task.FromResult(_capabilityContext.Capability);
+            return Task.FromResult(_capabilityContext.LastParseResult);
 
-        return Task.FromResult<CapabilityStatement?>(null);
+        return Task.FromResult<CapabilityParseResult?>(null);
     }
 
     public async Task<ServerConnectionResult> TestConnectionAsync(string serverUrl,
@@ -389,13 +395,24 @@ public sealed class FhirQueryService : IFhirQueryService
             client.DefaultRequestHeaders.Accept.ParseAdd("application/fhir+json");
             var url = $"{serverUrl.TrimEnd('/')}/metadata";
             using var resp = await client.GetAsync(url, cancellationToken);
+            var json = resp.IsSuccessStatusCode ? await resp.Content.ReadAsStringAsync(cancellationToken) : null;
             sw.Stop();
+            FhirVersion? fv = null;
+            if (!string.IsNullOrEmpty(json))
+            {
+                var declared = FhirVersionParser.ParseFromShortName(_options.DefaultFhirVersion);
+                if (declared == FhirVersion.Unknown)
+                    declared = _fhirBuilderOptions.DefaultFhirVersion;
+                fv = _capabilityRuntime.ParseMetadata(json, serverUrl.TrimEnd('/'), declared, _options.FhirVersionResolution)
+                    .DetectedVersion;
+            }
+
             return new ServerConnectionResult
             {
                 IsConnected = resp.IsSuccessStatusCode,
                 ResponseTimeMs = sw.ElapsedMilliseconds,
                 StatusCode = (int)resp.StatusCode,
-                FhirVersion = Common.FhirVersion.R5
+                FhirVersion = fv
             };
         }
         catch (Exception ex)
@@ -447,23 +464,19 @@ public sealed class FhirQueryService : IFhirQueryService
         }
     }
 
-    private CapabilityStatement.RestComponent.RestResourceComponent? FindRestResource(string resourceName)
+    public void Disconnect()
     {
-        var rest = SelectServerRest(_capabilityContext.Capability);
-        return rest?.Resource?.FirstOrDefault(r =>
-            string.Equals((string?)r.Type, resourceName, StringComparison.OrdinalIgnoreCase));
+        _httpClient?.Dispose();
+        _httpClient = null;
+        _activeBaseUrl = null;
+        _canonicalSearchParameterTypeCache.Clear();
+        _capabilityContext.Clear();
     }
 
-    private static CapabilityStatement.RestComponent? SelectServerRest(CapabilityStatement? cap)
+    private CapabilityRestResourceModel? FindRestResource(string resourceName)
     {
-        if (cap?.Rest == null || cap.Rest.Count == 0)
-            return null;
-
-        var server = cap.Rest.FirstOrDefault(r =>
-            string.Equals((string?)r.Mode, "server", StringComparison.OrdinalIgnoreCase));
-        if (server?.Resource is { Count: > 0 })
-            return server;
-
-        return cap.Rest.FirstOrDefault(r => r.Resource is { Count: > 0 }) ?? server ?? cap.Rest[0];
+        var model = _capabilityContext.CapabilityModel;
+        return model?.ServerResources.FirstOrDefault(r =>
+            string.Equals(r.Type, resourceName, StringComparison.OrdinalIgnoreCase));
     }
 }

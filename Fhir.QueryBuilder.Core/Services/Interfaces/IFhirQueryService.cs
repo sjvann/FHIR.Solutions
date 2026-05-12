@@ -1,5 +1,7 @@
 ﻿using Fhir.QueryBuilder.Common;
 using Fhir.QueryBuilder.Models;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 
 namespace Fhir.QueryBuilder.Services.Interfaces
 {
@@ -8,8 +10,9 @@ namespace Fhir.QueryBuilder.Services.Interfaces
     /// </summary>
     public interface IFhirQueryService
     {
-        // 原有方法（保持向後相容）
-        Task<Fhir.Resources.R5.CapabilityStatement?> ConnectToServerAsync(string baseUrl, CancellationToken cancellationToken = default);
+        /// <param name="declaredFhirVersionOverride">若指定，覆寫設定檔之 <see cref="Configuration.QueryBuilderAppSettings.DefaultFhirVersion"/>。</param>
+        Task<CapabilityParseResult?> ConnectToServerAsync(string baseUrl, CancellationToken cancellationToken = default,
+            FhirVersion? declaredFhirVersionOverride = null);
         Task<string?> ExecuteQueryAsync(string queryUrl, string? token = null, CancellationToken cancellationToken = default);
         Task<IEnumerable<string>?> GetSupportedResourcesAsync(CancellationToken cancellationToken = default);
         Task<string[]?> GetSearchIncludeAsync(string resourceName, CancellationToken cancellationToken = default);
@@ -46,7 +49,7 @@ namespace Fhir.QueryBuilder.Services.Interfaces
         /// <param name="serverUrl">伺服器 URL</param>
         /// <param name="cancellationToken">取消權杖</param>
         /// <returns>能力聲明</returns>
-        Task<Fhir.Resources.R5.CapabilityStatement?> GetCapabilityStatementAsync(string serverUrl, CancellationToken cancellationToken = default);
+        Task<CapabilityParseResult?> GetCapabilityStatementAsync(string serverUrl, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 測試伺服器連線
@@ -65,6 +68,9 @@ namespace Fhir.QueryBuilder.Services.Interfaces
         /// <param name="cancellationToken">取消權杖</param>
         /// <returns>資源結果</returns>
         Task<FhirResourceResult> GetResourceAsync(string serverUrl, string resourceType, string resourceId, CancellationToken cancellationToken = default);
+
+        /// <summary>中斷目前連線（例如切換 FHIR 宣告版本）。</summary>
+        void Disconnect();
     }
 
     /// <summary>

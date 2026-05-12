@@ -22,6 +22,9 @@ namespace Fhir.QueryBuilder
         string? _tokenValue;
         string? _oAuthValue;
 
+        /// <summary>避免程式同步下拉時觸發 <see cref="Cob_FhirVersion_SelectedIndexChanged"/> 寫回 ViewModel。</summary>
+        private bool _fhirVersionComboProgrammatic;
+
         ModifyResult? modifyResult;
         readonly string _defaultUrl = new("https://server.fire.ly");
 
@@ -66,6 +69,23 @@ namespace Fhir.QueryBuilder
         {
             // Bind ViewModel properties to UI controls
             txt_FhirUrl.Text = _viewModel.ServerUrl;
+
+            Cob_FhirVersion.Items.Clear();
+            foreach (var v in _viewModel.FhirVersionChoices)
+                Cob_FhirVersion.Items.Add(v);
+            _fhirVersionComboProgrammatic = true;
+            try
+            {
+                var idx = Cob_FhirVersion.Items.IndexOf(_viewModel.SelectedFhirVersionShort);
+                Cob_FhirVersion.SelectedIndex = idx >= 0 ? idx : Math.Max(0, Cob_FhirVersion.Items.Count - 1);
+            }
+            finally
+            {
+                _fhirVersionComboProgrammatic = false;
+            }
+
+            lab_FhirDetected.Text = _viewModel.DetectedFhirVersionDisplay;
+            lab_FhirActive.Text = _viewModel.ActiveFhirVersionDisplay;
 
             // Subscribe to ViewModel property changes
             _viewModel.PropertyChanged += ViewModel_PropertyChanged;
@@ -138,7 +158,37 @@ namespace Fhir.QueryBuilder
                     Btn_Save.Enabled = _viewModel.CanSaveResult;
                     Btn_Copy.Enabled = _viewModel.CanSaveResult;
                     break;
+                case nameof(MainViewModel.SelectedFhirVersionShort):
+                    _fhirVersionComboProgrammatic = true;
+                    try
+                    {
+                        var idx = Cob_FhirVersion.Items.IndexOf(_viewModel.SelectedFhirVersionShort);
+                        if (idx >= 0)
+                            Cob_FhirVersion.SelectedIndex = idx;
+                    }
+                    finally
+                    {
+                        _fhirVersionComboProgrammatic = false;
+                    }
+                    break;
+                case nameof(MainViewModel.DetectedFhirVersionDisplay):
+                    lab_FhirDetected.Text = _viewModel.DetectedFhirVersionDisplay;
+                    break;
+                case nameof(MainViewModel.ActiveFhirVersionDisplay):
+                    lab_FhirActive.Text = _viewModel.ActiveFhirVersionDisplay;
+                    break;
             }
+        }
+
+        private void Cob_FhirVersion_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (_fhirVersionComboProgrammatic)
+                return;
+            if (Cob_FhirVersion.SelectedItem is not string s)
+                return;
+            if (string.Equals(s, _viewModel.SelectedFhirVersionShort, StringComparison.Ordinal))
+                return;
+            _viewModel.SelectedFhirVersionShort = s;
         }
 
         private void SupportedResources_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -296,6 +346,8 @@ namespace Fhir.QueryBuilder
 
             // Update ViewModel with current URL
             _viewModel.ServerUrl = txt_FhirUrl.Text;
+            if (Cob_FhirVersion.SelectedItem is string declared)
+                _viewModel.SelectedFhirVersionShort = declared;
 
             // Use ViewModel to connect
             await _viewModel.ConnectToServerCommand.ExecuteAsync(null);

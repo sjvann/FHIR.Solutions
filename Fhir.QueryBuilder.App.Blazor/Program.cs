@@ -8,6 +8,7 @@ using Fhir.QueryBuilder.QueryBuilders.FluentApi;
 using Fhir.QueryBuilder.Services;
 using Fhir.QueryBuilder.Services.Interfaces;
 using Fhir.QueryBuilder.ViewModels;
+using Fhir.VersionManager;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
@@ -38,7 +39,14 @@ builder.Services.AddSingleton(_ => new HttpClient
     BaseAddress = new Uri(builder.HostEnvironment.BaseAddress),
 });
 
-builder.Services.AddFhirQueryBuilderR5();
+var qbSection = builder.Configuration.GetSection(QueryBuilderAppSettings.SectionName);
+var defaultVer = FhirVersionParser.ParseFromShortName(qbSection["DefaultFhirVersion"]);
+if (defaultVer == FhirVersion.Unknown)
+    defaultVer = FhirVersion.R5;
+
+builder.Services.AddFhirQueryBuilderMultiVersion(
+    new[] { FhirVersion.R4, FhirVersion.R4B, FhirVersion.R5 },
+    defaultVer);
 builder.Services.AddSingleton<Func<IFhirQueryBuilder>>(sp => () => sp.GetRequiredService<IFhirQueryBuilder>());
 builder.Services.AddSingleton<IPerformanceService, PerformanceService>();
 builder.Services.AddSingleton<IConfigurationService, ConfigurationService>();

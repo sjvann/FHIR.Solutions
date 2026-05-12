@@ -1,51 +1,44 @@
-using Fhir.QueryBuilder.Common;
 using Fhir.QueryBuilder.Services.Interfaces;
-using Fhir.Resources.R5;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 using Microsoft.Extensions.Logging;
 using Task = System.Threading.Tasks.Task;
 
 namespace Fhir.QueryBuilder.Services;
 
-/// <summary>基於 R5 <see cref="CapabilityStatement"/> 的輕量分析器。</summary>
+/// <summary>基於 <see cref="ICapabilityModel"/> 的輕量分析器（跨 R4/R4B/R5）。</summary>
 public sealed class CapabilityAnalyzer : ICapabilityAnalyzer
 {
     private readonly ILogger<CapabilityAnalyzer> _logger;
 
     public CapabilityAnalyzer(ILogger<CapabilityAnalyzer> logger) => _logger = logger;
 
-    public Task<CapabilityAnalysisResult> AnalyzeCapabilityAsync(CapabilityStatement capabilityStatement)
+    public Task<CapabilityAnalysisResult> AnalyzeCapabilityAsync(ICapabilityModel capability)
     {
         var result = new CapabilityAnalysisResult();
         try
         {
-            result.FhirVersion = FhirVersionParser.ParseFromCapabilityString((string?)capabilityStatement.FhirVersion);
-            result.ServerSoftware = (string?)capabilityStatement.Software?.Name;
+            result.FhirVersion = FhirVersionParser.ParseFromCapabilityString(capability.FhirVersionElement);
+            result.ServerSoftware = capability.SoftwareName;
 
-            var serverRest = SelectServerRest(capabilityStatement);
-            var resources = serverRest?.Resource ?? new List<CapabilityStatement.RestComponent.RestResourceComponent>();
+            var resources = capability.ServerResources;
 
             result.SupportedResources = resources
-                .Select(r => (string?)r.Type)
+                .Select(r => r.Type)
                 .Where(s => !string.IsNullOrEmpty(s))
                 .Cast<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             result.SupportedInteractions = resources
-                .SelectMany(r => r.Interaction ?? new List<CapabilityStatement.RestComponent.RestResourceComponent.RestResourceInteractionComponent>())
-                .Select(i => (string?)i.Code)
+                .SelectMany(r => r.InteractionCodes)
                 .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            result.TotalSearchParameters = resources.Sum(r => r.SearchParam?.Count ?? 0);
+            result.TotalSearchParameters = resources.Sum(r => r.SearchParams.Count);
 
-            result.SupportedFormats = capabilityStatement.Format?
-                .Select(f => (string?)f)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            result.SupportedFormats = capability.Formats.ToList();
 
             result.Security = new SecurityFeatures { SupportsTls = true };
             result.Advanced = new AdvancedFeatures
@@ -69,15 +62,15 @@ public sealed class CapabilityAnalyzer : ICapabilityAnalyzer
         return Task.FromResult(result);
     }
 
-    public async Task<CapabilityComparisonResult> CompareCapabilitiesAsync(CapabilityStatement baseline, CapabilityStatement target)
+    public async Task<CapabilityComparisonResult> CompareCapabilitiesAsync(ICapabilityModel baseline, ICapabilityModel target)
     {
         var baselineAnalysis = await AnalyzeCapabilityAsync(baseline);
         var targetAnalysis = await AnalyzeCapabilityAsync(target);
 
         var result = new CapabilityComparisonResult
         {
-            BaselineServer = (string?)baseline.Software?.Name ?? "Unknown",
-            TargetServer = (string?)target.Software?.Name ?? "Unknown",
+            BaselineServer = baseline.SoftwareName ?? "Unknown",
+            TargetServer = target.SoftwareName ?? "Unknown",
             CommonResources = baselineAnalysis.SupportedResources.Intersect(targetAnalysis.SupportedResources, StringComparer.OrdinalIgnoreCase).ToList(),
             BaselineOnlyResources = baselineAnalysis.SupportedResources.Except(targetAnalysis.SupportedResources, StringComparer.OrdinalIgnoreCase).ToList(),
             TargetOnlyResources = targetAnalysis.SupportedResources.Except(baselineAnalysis.SupportedResources, StringComparer.OrdinalIgnoreCase).ToList()
@@ -94,9 +87,9 @@ public sealed class CapabilityAnalyzer : ICapabilityAnalyzer
         return result;
     }
 
-    public async Task<bool> CheckFeatureSupportAsync(CapabilityStatement capabilityStatement, string feature)
+    public async Task<bool> CheckFeatureSupportAsync(ICapabilityModel capability, string feature)
     {
-        var analysis = await AnalyzeCapabilityAsync(capabilityStatement);
+        var analysis = await AnalyzeCapabilityAsync(capability);
         return feature.ToLowerInvariant() switch
         {
             "oauth" => analysis.Security.SupportsOAuth,
@@ -110,44 +103,31 @@ public sealed class CapabilityAnalyzer : ICapabilityAnalyzer
         };
     }
 
-    public Task<QueryStrategyRecommendation> GetQueryStrategyAsync(CapabilityStatement capabilityStatement, string resourceType)
+    public Task<QueryStrategyRecommendation> GetQueryStrategyAsync(ICapabilityModel capability, string resourceType)
     {
-        var serverRest = SelectServerRest(capabilityStatement);
-        var resource = serverRest?.Resource?.FirstOrDefault(r =>
-            string.Equals((string?)r.Type, resourceType, StringComparison.OrdinalIgnoreCase));
+        var resource = capability.ServerResources.FirstOrDefault(r =>
+            string.Equals(r.Type, resourceType, StringComparison.OrdinalIgnoreCase));
 
         var recommendation = new QueryStrategyRecommendation { ResourceType = resourceType };
 
         if (resource != null)
         {
-            recommendation.RecommendedSearchParameters = resource.SearchParam?
-                .Select(sp => (string?)sp.Name)
+            recommendation.RecommendedSearchParameters = resource.SearchParams
+                .Select(sp => sp.Name)
                 .Where(n => !string.IsNullOrEmpty(n))
                 .Cast<string>()
                 .Take(10)
-                .ToList() ?? new List<string>();
+                .ToList();
 
-            recommendation.SupportedIncludes = resource.SearchInclude?
-                .Select(s => (string?)s)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            recommendation.SupportedIncludes = resource.SearchIncludes.ToList();
 
-            recommendation.SupportsSorting = resource.Interaction?
-                .Any(i => string.Equals((string?)i.Code, "search-type", StringComparison.OrdinalIgnoreCase)) ?? false;
+            recommendation.SupportsSorting = resource.InteractionCodes
+                .Any(i => string.Equals(i, "search-type", StringComparison.OrdinalIgnoreCase));
         }
         else
             recommendation.Limitations.Add($"Resource type '{resourceType}' is not supported by this server");
 
         return Task.FromResult(recommendation);
-    }
-
-    private static CapabilityStatement.RestComponent? SelectServerRest(CapabilityStatement? cap)
-    {
-        if (cap?.Rest == null || cap.Rest.Count == 0)
-            return null;
-        return cap.Rest.FirstOrDefault(r => string.Equals((string?)r.Mode, "server", StringComparison.OrdinalIgnoreCase))
-               ?? cap.Rest[0];
     }
 
     private static List<string> GenerateRecommendations(CapabilityAnalysisResult analysis)

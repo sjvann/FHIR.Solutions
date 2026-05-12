@@ -46,10 +46,62 @@ namespace Fhir.Terminology.Infrastructure.Migrations
                     b.ToTable("BindingRegistry");
                 });
 
+            modelBuilder.Entity("Fhir.Terminology.Infrastructure.TerminologyPackageImportEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FhirVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ImportedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PackageId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PackageVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ResourceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sha256Hex")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SourceUri")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ImportedAtUtc");
+
+                    b.HasIndex("PackageId", "PackageVersion");
+
+                    b.ToTable("TerminologyPackageImports");
+                });
+
             modelBuilder.Entity("Fhir.Terminology.Infrastructure.TerminologyResourceEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FhirSpecVersion")
+                        .IsRequired()
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("LogicalId")
@@ -88,6 +140,8 @@ namespace Fhir.Terminology.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FhirSpecVersion");
+
                     b.HasIndex("LogicalId");
 
                     b.HasIndex("Name");
@@ -102,7 +156,7 @@ namespace Fhir.Terminology.Infrastructure.Migrations
 
                     b.HasIndex("Version");
 
-                    b.HasIndex("ResourceType", "LogicalId")
+                    b.HasIndex("ResourceType", "LogicalId", "FhirSpecVersion")
                         .IsUnique();
 
                     b.ToTable("TerminologyResources");

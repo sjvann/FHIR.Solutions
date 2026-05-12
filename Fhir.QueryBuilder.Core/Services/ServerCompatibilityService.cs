@@ -1,8 +1,10 @@
 ﻿using Fhir.QueryBuilder.Common;
+using Fhir.QueryBuilder.Configuration;
 using Fhir.QueryBuilder.Services.Interfaces;
-using Fhir.Resources.R5;
-using Fhir.TypeFramework.Serialization;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Task = System.Threading.Tasks.Task;
 
 namespace Fhir.QueryBuilder.Services;
@@ -12,16 +14,22 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
     private readonly HttpClient _httpClient;
     private readonly ICacheService _cacheService;
     private readonly ILogger<ServerCompatibilityService> _logger;
+    private readonly IFhirCapabilityRuntime _capabilityRuntime;
+    private readonly QueryBuilderAppSettings _appSettings;
     private readonly TimeSpan _cacheExpiration = TimeSpan.FromHours(24);
 
     public ServerCompatibilityService(
         HttpClient httpClient,
         ICacheService cacheService,
-        ILogger<ServerCompatibilityService> logger)
+        ILogger<ServerCompatibilityService> logger,
+        IFhirCapabilityRuntime capabilityRuntime,
+        IOptions<QueryBuilderAppSettings> appSettings)
     {
         _httpClient = httpClient;
         _cacheService = cacheService;
         _logger = logger;
+        _capabilityRuntime = capabilityRuntime;
+        _appSettings = appSettings.Value;
     }
 
     public async Task<ServerCompatibilityReport> CheckCompatibilityAsync(string serverUrl)
@@ -35,39 +43,31 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
 
         try
         {
-            var capabilityStatement = await GetCapabilityStatementAsync(serverUrl);
-            if (capabilityStatement == null)
+            var parse = await GetCapabilityStatementAsync(serverUrl);
+            if (parse == null)
             {
                 report.IsAvailable = false;
                 report.ErrorMessage = "Unable to retrieve CapabilityStatement";
                 return report;
             }
 
+            var model = parse.Model;
             report.IsAvailable = true;
-            report.DetectedVersion = FhirVersionParser.ParseFromCapabilityString((string?)capabilityStatement.FhirVersion);
-            report.ServerSoftware = (string?)capabilityStatement.Software?.Name;
-            report.ImplementationGuides = capabilityStatement.ImplementationGuide?
-                .Select(c => (string?)c)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            report.DetectedVersion = FhirVersionParser.ParseFromCapabilityString(model.FhirVersionElement);
+            report.ServerSoftware = model.SoftwareName;
+            report.ImplementationGuides = model.ImplementationGuideUrls.ToList();
 
-            var serverRest = SelectServerRest(capabilityStatement);
-            foreach (var restResource in serverRest?.Resource ?? Enumerable.Empty<CapabilityStatement.RestComponent.RestResourceComponent>())
+            foreach (var restResource in model.ServerResources)
             {
-                var typeName = (string?)restResource.Type ?? "";
+                var typeName = restResource.Type ?? "";
                 if (string.IsNullOrEmpty(typeName))
                     continue;
 
                 report.ResourceSupport.Add(new ResourceSupportInfo
                 {
                     Type = typeName,
-                    Interactions = restResource.Interaction?
-                        .Select(i => (string?)i.Code)
-                        .Where(s => !string.IsNullOrEmpty(s))
-                        .Cast<string>()
-                        .ToList() ?? new List<string>(),
-                    SearchParameterCount = restResource.SearchParam?.Count ?? 0,
+                    Interactions = restResource.InteractionCodes.ToList(),
+                    SearchParameterCount = restResource.SearchParams.Count,
                     CompatibilityScore = CalculateResourceCompatibilityScore(restResource)
                 });
             }
@@ -98,16 +98,16 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
 
         try
         {
-            var capabilityStatement = await GetCapabilityStatementAsync(serverUrl);
-            if (capabilityStatement == null)
+            var parse = await GetCapabilityStatementAsync(serverUrl);
+            if (parse == null)
             {
                 report.ErrorMessage = "Unable to retrieve CapabilityStatement";
                 return report;
             }
 
-            var serverRest = SelectServerRest(capabilityStatement);
-            var restResource = serverRest?.Resource?.FirstOrDefault(r =>
-                string.Equals((string?)r.Type, resourceType, StringComparison.OrdinalIgnoreCase));
+            var model = parse.Model;
+            var restResource = model.ServerResources.FirstOrDefault(r =>
+                string.Equals(r.Type, resourceType, StringComparison.OrdinalIgnoreCase));
 
             if (restResource == null)
             {
@@ -116,31 +116,19 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
             }
 
             report.IsSupported = true;
-            report.SupportedInteractions = restResource.Interaction?
-                .Select(i => (string?)i.Code)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            report.SupportedInteractions = restResource.InteractionCodes.ToList();
 
-            report.SupportedIncludes = restResource.SearchInclude?
-                .Select(s => (string?)s)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            report.SupportedIncludes = restResource.SearchIncludes.ToList();
 
-            report.SupportedRevIncludes = restResource.SearchRevInclude?
-                .Select(s => (string?)s)
-                .Where(s => !string.IsNullOrEmpty(s))
-                .Cast<string>()
-                .ToList() ?? new List<string>();
+            report.SupportedRevIncludes = restResource.SearchRevIncludes.ToList();
 
-            report.SearchParameters = restResource.SearchParam?.Select(sp => new SearchParameterSupportInfo
+            report.SearchParameters = restResource.SearchParams.Select(sp => new SearchParameterSupportInfo
             {
-                Name = (string?)sp.Name ?? "",
-                Type = ParseSearchParameterType((string?)sp.Type),
+                Name = sp.Name ?? "",
+                Type = ParseSearchParameterType(sp.Type),
                 Modifiers = new List<string>(),
-                IsStandard = IsStandardParameter((string?)sp.Name ?? "")
-            }).ToList() ?? new List<SearchParameterSupportInfo>();
+                IsStandard = IsStandardParameter(sp.Name ?? "")
+            }).ToList();
 
             await _cacheService.SetAsync(cacheKey, report, _cacheExpiration);
         }
@@ -181,16 +169,17 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
         });
     }
 
-    public async Task<CapabilityStatement?> GetCapabilityStatementAsync(string serverUrl)
+    public async Task<CapabilityParseResult?> GetCapabilityStatementAsync(string serverUrl)
     {
-        var cacheKey = $"capability:{serverUrl}";
-        var cached = await _cacheService.GetAsync<CapabilityStatement>(cacheKey);
+        var normalized = serverUrl.TrimEnd('/');
+        var cacheKey = $"capability:{normalized}";
+        var cached = await _cacheService.GetAsync<CapabilityParseResult>(cacheKey);
         if (cached != null)
             return cached;
 
         try
         {
-            var url = $"{serverUrl.TrimEnd('/')}/metadata";
+            var url = $"{normalized}/metadata";
             var response = await _httpClient.GetAsync(url);
 
             if (!response.IsSuccessStatusCode)
@@ -201,12 +190,14 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
             }
 
             var json = await response.Content.ReadAsStringAsync();
-            var capability = FhirJsonSerializer.Deserialize<CapabilityStatement>(json);
+            var declared = FhirVersionParser.ParseFromShortName(_appSettings.DefaultFhirVersion);
+            if (declared == FhirVersion.Unknown)
+                declared = FhirVersion.R5;
+            var parse = _capabilityRuntime.ParseMetadata(json, normalized, declared, _appSettings.FhirVersionResolution);
 
-            if (capability != null)
-                await _cacheService.SetAsync(cacheKey, capability, _cacheExpiration);
+            await _cacheService.SetAsync(cacheKey, parse, _cacheExpiration);
 
-            return capability;
+            return parse;
         }
         catch (Exception ex)
         {
@@ -217,9 +208,9 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
 
     public async Task<FhirVersion?> DetectFhirVersionAsync(string serverUrl)
     {
-        var capability = await GetCapabilityStatementAsync(serverUrl);
-        return capability != null
-            ? FhirVersionParser.ParseFromCapabilityString((string?)capability.FhirVersion)
+        var parse = await GetCapabilityStatementAsync(serverUrl);
+        return parse != null
+            ? FhirVersionParser.ParseFromCapabilityString(parse.Model.FhirVersionElement)
             : null;
     }
 
@@ -233,14 +224,6 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
             await _cacheService.RemoveByPatternAsync($"capability:{serverUrl}");
             await _cacheService.RemoveByPatternAsync($"resource:{serverUrl}:*");
         }
-    }
-
-    private static CapabilityStatement.RestComponent? SelectServerRest(CapabilityStatement? cap)
-    {
-        if (cap?.Rest == null || cap.Rest.Count == 0)
-            return null;
-        return cap.Rest.FirstOrDefault(r => string.Equals((string?)r.Mode, "server", StringComparison.OrdinalIgnoreCase))
-               ?? cap.Rest[0];
     }
 
     private static SearchParameterType ParseSearchParameterType(string? typeString)
@@ -266,14 +249,10 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
         return standardParams.Contains(parameterName);
     }
 
-    private static int CalculateResourceCompatibilityScore(CapabilityStatement.RestComponent.RestResourceComponent resource)
+    private static int CalculateResourceCompatibilityScore(CapabilityRestResourceModel resource)
     {
         var score = 50;
-        var interactions = resource.Interaction?
-            .Select(i => (string?)i.Code)
-            .Where(s => !string.IsNullOrEmpty(s))
-            .Cast<string>()
-            .ToList() ?? new List<string>();
+        var interactions = resource.InteractionCodes;
 
         if (interactions.Contains("read")) score += 10;
         if (interactions.Contains("search-type")) score += 15;
@@ -281,7 +260,7 @@ public sealed class ServerCompatibilityService : IServerCompatibilityService
         if (interactions.Contains("update")) score += 10;
         if (interactions.Contains("delete")) score += 5;
 
-        score += Math.Min((resource.SearchParam?.Count ?? 0) * 2, 20);
+        score += Math.Min(resource.SearchParams.Count * 2, 20);
 
         return Math.Min(score, 100);
     }

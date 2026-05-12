@@ -25,7 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Fhir.Auth.TokenServer\Fhir.Auth.TokenServer.csproj" />
     <ProjectReference Include="..\Fhir.TypeFramework\Fhir.TypeFramework.csproj" />
-    <ProjectReference Include="..\Fhir.ResourceCreator\generated\Fhir.Resources.R5\Fhir.Resources.R5.csproj" />
+    <ProjectReference Include="..\Fhir.VersionManager\Fhir.VersionManager.csproj" />
   </ItemGroup>
 
 </Project>

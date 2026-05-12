@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.OleDb;
 using System.Linq;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -19,6 +20,7 @@ namespace FhirResourceCreator.Models
         private readonly string? _SaveTo;
         private List<ElementRecord>? _Elements;
 
+        [SupportedOSPlatform("windows")]
         public ResourceModel(string filePath, string saveTo, string? rootNamespace)
         {
 
@@ -115,6 +117,7 @@ namespace FhirResourceCreator.Models
 
         #endregion
         #region Private Method
+        [SupportedOSPlatform("windows")]
         private void LoadElement()
         {
             List<ElementRecord> elementSet = new();

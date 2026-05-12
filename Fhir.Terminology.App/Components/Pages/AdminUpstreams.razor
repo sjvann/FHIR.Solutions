@@ -2,6 +2,7 @@
 @using System.Net
 @inject ITerminologyRepository Repository
 @inject TerminologyOrchestrator Orchestrator
+@inject NavigationManager Navigation
 
 <h2>遠端術語上游</h2>
 
@@ -13,10 +14,40 @@
     <summary style="cursor:pointer;font-weight:600;">路由規則（點開）</summary>
     <ul style="margin:8px 0 0 1rem;line-height:1.6;">
         <li>請求若帶 <code>system</code> 查詢參數，會選<strong>第一個</strong>滿足「<code>system</code> 以此處的 <strong>System URI 前綴</strong>開頭」的上游（前綴愈長愈優先）。</li>
-        <li>若無符合前綴，則使用清單中<strong>排序第一筆</strong>上游。</li>
+        <li>若<strong>沒有</strong> <code>system</code>（例如部分僅帶 <code>url=</code> 的 <code>ValueSet/$expand</code>），會改用清單中<strong>前綴字串最長</strong>的那一筆上游（請謹慎排序；LOINC 查碼請盡量使用下方範例之 <code>$lookup</code> 並<strong>務必帶 system</strong>）。</li>
         <li>LOINC 請使用前綴 <code>http://loinc.org</code>；SNOMED CT 常為 <code>http://snomed.info/sct</code>。</li>
     </ul>
 </details>
+
+<section style="margin:18px 0;padding:14px 18px;border:1px solid #0d6efd;border-radius:8px;background:#f0f7ff;max-width:920px;line-height:1.65;">
+    <h3 style="margin:0 0 12px;font-size:1.08rem;color:#0b4a8c;">LOINC 測試案例（FHIR 公開術語伺服器）</h3>
+    <p style="margin:0 0 12px;font-size:0.95rem;color:#333;">
+        以下使用 HL7 維護之公開端點 <strong><code>https://tx.fhir.org/r4</code></strong>（REST 根即含 <code>/fhir</code>），無需 API Key，適合本機驗證「上游轉發」是否生效。
+    </p>
+    <ol style="margin:0;padding-left:1.25rem;font-size:0.95rem;">
+        <li style="margin-bottom:10px;">
+            <strong>新增一筆上游</strong>（表單如下「新增上游」）：
+            <ul style="margin:6px 0 0 1rem;list-style:disc;">
+                <li><strong>System URI 前綴</strong>：<code>http://loinc.org</code>（須與 <code>Coding.system</code> 一致，勿只填 LOINC）。</li>
+                <li><strong>Base URL</strong>：<code>https://tx.fhir.org/r4</code></li>
+                <li><strong>Authorization</strong>：留白。</li>
+            </ul>
+        </li>
+        <li style="margin-bottom:10px;">
+            <strong>呼叫本機術語 API</strong>（會先查本機；若無完整 LOINC 詞表則轉發至 Tx）：對 LOINC 碼 <code>29463-7</code>（常見檢驗：血清葡萄糖）做查碼：
+            <div style="margin:8px 0;padding:10px 12px;background:#fff;border:1px solid #b8d4e8;border-radius:6px;word-break:break-all;font-family:ui-monospace,Consolas,monospace;font-size:0.88rem;">
+                <a href="@ExampleLocalLoincLookupUrl" target="_blank" rel="noopener noreferrer">@ExampleLocalLoincLookupUrl</a>
+            </div>
+            亦可在 <a href="/scalar/v1" target="_blank" rel="noopener noreferrer">Scalar</a> 找 <code>CodeSystem / $lookup</code>，參數 <code>system=http://loinc.org</code>、<code>code=29463-7</code>。
+        </li>
+        <li>
+            <strong>預期</strong>：HTTP 200，本體為 FHIR <code>Parameters</code>（含 <code>display</code> 等）；若連線 Tx 失敗則檢查網路／防火牆，或改設定貴院自有術語伺服器之 Base URL。
+        </li>
+    </ol>
+    <p style="margin:12px 0 0;font-size:0.88rem;color:#555;">
+        直接驗證遠端是否活著（不經本機）：<a href="@DirectTxLoincLookupUrl" target="_blank" rel="noopener noreferrer">Tx 上同一支 $lookup</a>（比對回應是否與本機轉發一致）。
+    </p>
+</section>
 
 @if (_rows is null)
 {
@@ -79,7 +110,7 @@ else
 
 <h3 style="margin-top:24px;">新增上游</h3>
 
-<EditForm Model="_model" OnValidSubmit="AddAsync">
+<EditForm Model="_model" OnValidSubmit="AddAsync" FormName="terminology-admin-upstreams-add">
     <div style="margin-bottom:12px;max-width:560px;">
         <label for="prefix"><strong>System URI 前綴（必填）</strong></label>
         <InputText id="prefix" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.SystemUriPrefix" placeholder="http://loinc.org" />
@@ -89,9 +120,10 @@ else
     </div>
     <div style="margin-bottom:12px;max-width:560px;">
         <label for="baseUrl"><strong>Base URL（必填）</strong></label>
-        <InputText id="baseUrl" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.BaseUrl" placeholder="https://tx.fhir.org/r4" />
+        <InputText id="baseUrl" style="width:100%;max-width:560px;padding:6px 8px;margin-top:4px;box-sizing:border-box;" @bind-Value="_model.BaseUrl" placeholder="請輸入含 /fhir 的根 URL（勿僅依賴灰色提示字）" />
         <small style="display:block;margin-top:4px;color:#555;">
-            遠端 FHIR 服務根位址，需包含 <strong>/fhir</strong> 路徑（或您環境實際的 REST 根，例如 <code>https://host/fhir</code>）。本系統會將 <code>CodeSystem/$lookup</code> 等路徑接在此網址之後。
+            遠端<strong>術語 REST 根</strong>：自架環境多為 <code>https://host/…/fhir</code>；HL7 公開 <code>https://tx.fhir.org/r4</code> 則以 <code>/r4</code> 為根（路徑裡沒有 <code>/fhir</code> 字樣亦屬正常）。本系統會將 <code>CodeSystem/$lookup</code> 等接在該根之後。
+            <span style="display:block;margin-top:6px;color:#666;">表單<strong>預設已帶入</strong> Tx；若僅見<strong>淺灰色字</strong>表示尚未輸入，請點入框內或重新整理。</span>
         </small>
     </div>
     <div style="margin-bottom:12px;max-width:560px;">
@@ -113,6 +145,12 @@ else
 </p>
 
 @code {
+    /// <summary>本機完整 URL：供瀏覽器測試 LOINC $lookup 轉發。</summary>
+    private string ExampleLocalLoincLookupUrl =>
+        $"{Navigation.BaseUri.TrimEnd('/')}/fhir/CodeSystem/$lookup?system={Uri.EscapeDataString("http://loinc.org")}&code=29463-7&fhirSpecVersion=5.0.0";
+
+    private const string DirectTxLoincLookupUrl = "https://tx.fhir.org/r4/CodeSystem/$lookup?system=http%3A%2F%2Floinc.org&code=29463-7";
+
     private IReadOnlyList<UpstreamServerRow>? _rows;
     private string? _message;
     private string? _successMessage;
@@ -167,6 +205,26 @@ else
         }
     }
 
+    /// <summary>
+    /// 自架伺服器多為 <c>https://host/.../fhir</c>；HL7 <c>tx.fhir.org</c> 則以 <c>/r4</c>、<c>/r5</c> 為根，路徑中未必出現 <c>/fhir</c> 字樣。
+    /// </summary>
+    private static bool IsAcceptableUpstreamBaseUrl(string baseUrl)
+    {
+        if (!Uri.TryCreate(baseUrl.Trim(), UriKind.Absolute, out var uri))
+            return false;
+        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            return false;
+
+        if (baseUrl.Contains("/fhir", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // 官方公開術語：CodeSystem/$lookup 掛在 https://tx.fhir.org/r4/... 之下
+        if (string.Equals(uri.Host, "tx.fhir.org", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
+    }
+
     private async Task AddAsync()
     {
         _busy = true;
@@ -186,9 +244,9 @@ else
                 _message = "請填寫 Base URL。";
                 return;
             }
-            if (!baseUrl.Contains("/fhir", StringComparison.OrdinalIgnoreCase))
+            if (!IsAcceptableUpstreamBaseUrl(baseUrl))
             {
-                _message = "Base URL 應包含路徑 /fhir（例如 https://example.org/fhir 或 https://tx.fhir.org/r4）。";
+                _message = "Base URL 須為 http(s) 絕對位址，且為遠端 FHIR 術語 REST 根：常見為路徑含 /fhir，或 HL7 公開服務 https://tx.fhir.org/r4（/r4 即根，勿再要求字串 /fhir）。";
                 return;
             }
 
@@ -214,7 +272,10 @@ else
     private sealed class UpstreamFormModel
     {
         public string SystemUriPrefix { get; set; } = "http://loinc.org";
-        public string BaseUrl { get; set; } = "";
+
+        /// <summary>預設為 FHIR 公開術語伺服器（與頁面 LOINC 範例一致）；避免使用者將 placeholder 誤認為已輸入。</summary>
+        public string BaseUrl { get; set; } = "https://tx.fhir.org/r4";
+
         public string? AuthorizationHeader { get; set; }
         public int TimeoutSeconds { get; set; } = 60;
     }

@@ -11,10 +11,17 @@
   <Project Path="Fhir.ResourceCreator/Fhir.ResourceCreator.csproj" />
   <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R5/Fhir.Resources.R5.csproj" />
   <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R5/Fhir.Resources.R5.Tests/Fhir.Resources.R5.Tests.csproj" />
+  <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R4/Fhir.Resources.R4.csproj" />
+  <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R4/Fhir.Resources.R4.Tests/Fhir.Resources.R4.Tests.csproj" />
+  <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R4B/Fhir.Resources.R4B.csproj" />
+  <Project Path="Fhir.ResourceCreator/generated/Fhir.Resources.R4B/Fhir.Resources.R4B.Tests/Fhir.Resources.R4B.Tests.csproj" />
   <Project Path="Fhir.TypeFramework.Tests/Fhir.TypeFramework.Tests.csproj" />
   <Project Path="Fhir.TypeFramework/Fhir.TypeFramework.csproj" />
+  <Project Path="Fhir.VersionManager/Fhir.VersionManager.csproj" />
+  <Project Path="Fhir.VersionManager.Tests/Fhir.VersionManager.Tests.csproj" />
   <Project Path="Fhir.Terminology.App/Fhir.Terminology.App.csproj" />
   <Project Path="Fhir.Terminology.Core/Fhir.Terminology.Core.csproj" />
   <Project Path="Fhir.Terminology.Infrastructure/Fhir.Terminology.Infrastructure.csproj" />
   <Project Path="Fhir.Terminology.Tests/Fhir.Terminology.Tests.csproj" />
+  <Project Path="Fhir.Terminology.PackageImporter/Fhir.Terminology.PackageImporter.csproj" />
 </Solution>

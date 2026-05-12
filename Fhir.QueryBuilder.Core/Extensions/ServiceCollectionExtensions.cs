@@ -1,5 +1,4 @@
-﻿using Fhir.QueryBuilder.Common;
-using Fhir.QueryBuilder.Metadata;
+﻿using Fhir.QueryBuilder.Metadata;
 using Fhir.QueryBuilder.QueryBuilders;
 using Fhir.QueryBuilder.QueryBuilders.Advanced;
 using Fhir.QueryBuilder.QueryBuilders.FluentApi;
@@ -9,6 +8,7 @@ using Fhir.QueryBuilder.Configuration;
 using Fhir.QueryBuilder.Services;
 using Fhir.Auth.TokenServer.DependencyInjection;
 using Fhir.QueryBuilder.Services.Interfaces;
+using Fhir.VersionManager;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Fhir.QueryBuilder.Extensions;
@@ -25,7 +25,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(options);
 
         RegisterCacheServices(services, options);
-        RegisterCoreServices(services);
+        services.AddFhirVersionManager();
+        RegisterCoreServices(services, options);
         RegisterFluentApiServices(services);
         RegisterQueryBuilderServices(services, options);
         RegisterCompatibilityServices(services, options);
@@ -60,14 +61,14 @@ public static class ServiceCollectionExtensions
         });
     }
 
-    private static void RegisterCoreServices(IServiceCollection services)
+    private static void RegisterCoreServices(IServiceCollection services, FhirQueryBuilderOptions options)
     {
         services.AddSingleton<ICapabilityContext, CapabilityContext>();
-        services.AddSingleton<IMetadataResourceProvider, R5CapabilityMetadataProvider>();
+        services.AddSingleton<IMetadataResourceProvider, CapabilityMetadataProvider>();
         services.AddSingleton<IMetadataResourceProviderResolver>(sp =>
         {
             var provider = sp.GetRequiredService<IMetadataResourceProvider>();
-            return new MetadataResourceProviderResolver(new[] { provider });
+            return new MetadataResourceProviderResolver(provider, options.SupportedVersions);
         });
         services.AddSingleton<ISearchParameterRegistry, PermissiveSearchParameterRegistry>();
     }

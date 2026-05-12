@@ -70,6 +70,7 @@ public static class ExternalCanonicalCodeSystemsSeed
     public static async Task EnsureRegisteredAsync(
         TerminologyDbContext db,
         ITerminologyRepository repository,
+        string seedFhirSpecVersion,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -77,11 +78,15 @@ public static class ExternalCanonicalCodeSystemsSeed
         foreach (var (logicalId, json) in Entries)
         {
             var exists = await db.TerminologyResources.AsNoTracking()
-                .AnyAsync(x => x.ResourceType == "CodeSystem" && x.LogicalId == logicalId, cancellationToken);
+                .AnyAsync(
+                    x => x.ResourceType == "CodeSystem"
+                        && x.LogicalId == logicalId
+                        && x.FhirSpecVersion == seedFhirSpecVersion,
+                    cancellationToken);
             if (exists)
                 continue;
 
-            await repository.CreateAsync(json, cancellationToken);
+            await repository.CreateAsync(json, seedFhirSpecVersion, cancellationToken);
             inserted++;
         }
 

@@ -24,6 +24,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="TestData\minimal-fhir-package.tgz">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="TestData\bundle-two-valuesets.tgz">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Fhir.Terminology.App\Fhir.Terminology.App.csproj" />
     <ProjectReference Include="..\Fhir.Terminology.Core\Fhir.Terminology.Core.csproj" />
     <ProjectReference Include="..\Fhir.Terminology.Infrastructure\Fhir.Terminology.Infrastructure.csproj" />

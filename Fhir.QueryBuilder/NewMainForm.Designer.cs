@@ -34,6 +34,12 @@ namespace Fhir.QueryBuilder
             label2 = new Label();
             Btn_GetToken = new Button();
             Cob_Resource = new ComboBox();
+            lab_FhirVerDecl = new Label();
+            Cob_FhirVersion = new ComboBox();
+            lab_FhirDetLbl = new Label();
+            lab_FhirDetected = new Label();
+            lab_FhirActLbl = new Label();
+            lab_FhirActive = new Label();
             tabControl1 = new TabControl();
             tap_Common = new TabPage();
             Lib_CommonParameter = new ListBox();
@@ -247,12 +253,67 @@ namespace Fhir.QueryBuilder
             Cob_Resource.TabIndex = 5;
             Cob_Resource.SelectedIndexChanged += Cob_Resource_SelectedIndexChanged;
             // 
+            // lab_FhirVerDecl
+            // 
+            lab_FhirVerDecl.AutoSize = true;
+            lab_FhirVerDecl.Location = new Point(12, 58);
+            lab_FhirVerDecl.Name = "lab_FhirVerDecl";
+            lab_FhirVerDecl.Size = new Size(64, 15);
+            lab_FhirVerDecl.TabIndex = 38;
+            lab_FhirVerDecl.Text = "FHIR 宣告";
+            // 
+            // Cob_FhirVersion
+            // 
+            Cob_FhirVersion.DropDownStyle = ComboBoxStyle.DropDownList;
+            Cob_FhirVersion.FormattingEnabled = true;
+            Cob_FhirVersion.Location = new Point(82, 54);
+            Cob_FhirVersion.Name = "Cob_FhirVersion";
+            Cob_FhirVersion.Size = new Size(56, 23);
+            Cob_FhirVersion.TabIndex = 39;
+            Cob_FhirVersion.SelectedIndexChanged += Cob_FhirVersion_SelectedIndexChanged;
+            // 
+            // lab_FhirDetLbl
+            // 
+            lab_FhirDetLbl.AutoSize = true;
+            lab_FhirDetLbl.Location = new Point(148, 58);
+            lab_FhirDetLbl.Name = "lab_FhirDetLbl";
+            lab_FhirDetLbl.Size = new Size(31, 15);
+            lab_FhirDetLbl.TabIndex = 40;
+            lab_FhirDetLbl.Text = "偵測";
+            // 
+            // lab_FhirDetected
+            // 
+            lab_FhirDetected.AutoSize = true;
+            lab_FhirDetected.Location = new Point(185, 58);
+            lab_FhirDetected.Name = "lab_FhirDetected";
+            lab_FhirDetected.Size = new Size(15, 15);
+            lab_FhirDetected.TabIndex = 41;
+            lab_FhirDetected.Text = "—";
+            // 
+            // lab_FhirActLbl
+            // 
+            lab_FhirActLbl.AutoSize = true;
+            lab_FhirActLbl.Location = new Point(220, 58);
+            lab_FhirActLbl.Name = "lab_FhirActLbl";
+            lab_FhirActLbl.Size = new Size(31, 15);
+            lab_FhirActLbl.TabIndex = 42;
+            lab_FhirActLbl.Text = "作用";
+            // 
+            // lab_FhirActive
+            // 
+            lab_FhirActive.AutoSize = true;
+            lab_FhirActive.Location = new Point(257, 58);
+            lab_FhirActive.Name = "lab_FhirActive";
+            lab_FhirActive.Size = new Size(15, 15);
+            lab_FhirActive.TabIndex = 43;
+            lab_FhirActive.Text = "—";
+            // 
             // tabControl1
             // 
             tabControl1.Controls.Add(tap_Common);
             tabControl1.Controls.Add(tap_Resource);
             tabControl1.Controls.Add(tap_Advanced);
-            tabControl1.Location = new Point(12, 66);
+            tabControl1.Location = new Point(12, 88);
             tabControl1.Name = "tabControl1";
             tabControl1.SelectedIndex = 0;
             tabControl1.Size = new Size(210, 374);
@@ -322,7 +383,7 @@ namespace Fhir.QueryBuilder
             // lab_SearchField
             // 
             lab_SearchField.BorderStyle = BorderStyle.FixedSingle;
-            lab_SearchField.Location = new Point(228, 66);
+            lab_SearchField.Location = new Point(228, 88);
             lab_SearchField.Name = "lab_SearchField";
             lab_SearchField.Size = new Size(181, 23);
             lab_SearchField.TabIndex = 8;
@@ -331,7 +392,7 @@ namespace Fhir.QueryBuilder
             // lab_SerchType
             // 
             lab_SerchType.BorderStyle = BorderStyle.FixedSingle;
-            lab_SerchType.Location = new Point(415, 66);
+            lab_SerchType.Location = new Point(415, 88);
             lab_SerchType.Name = "lab_SerchType";
             lab_SerchType.Size = new Size(156, 23);
             lab_SerchType.TabIndex = 9;
@@ -347,7 +408,7 @@ namespace Fhir.QueryBuilder
             Pan_InputParameters.Controls.Add(panString);
             Pan_InputParameters.Controls.Add(panNumber);
             Pan_InputParameters.Controls.Add(panDate);
-            Pan_InputParameters.Location = new Point(228, 92);
+            Pan_InputParameters.Location = new Point(228, 114);
             Pan_InputParameters.Name = "Pan_InputParameters";
             Pan_InputParameters.Size = new Size(343, 348);
             Pan_InputParameters.TabIndex = 10;
@@ -1390,7 +1451,7 @@ namespace Fhir.QueryBuilder
             // 
             // Btn_AddParameter
             // 
-            Btn_AddParameter.Location = new Point(496, 446);
+            Btn_AddParameter.Location = new Point(496, 468);
             Btn_AddParameter.Name = "Btn_AddParameter";
             Btn_AddParameter.Size = new Size(76, 23);
             Btn_AddParameter.TabIndex = 11;
@@ -1402,7 +1463,7 @@ namespace Fhir.QueryBuilder
             // 
             Lib_ParameterList.FormattingEnabled = true;
             Lib_ParameterList.ItemHeight = 15;
-            Lib_ParameterList.Location = new Point(576, 90);
+            Lib_ParameterList.Location = new Point(576, 112);
             Lib_ParameterList.Name = "Lib_ParameterList";
             Lib_ParameterList.Size = new Size(181, 349);
             Lib_ParameterList.TabIndex = 12;
@@ -1410,7 +1471,7 @@ namespace Fhir.QueryBuilder
             // 
             // Btn_RemoveParameter
             // 
-            Btn_RemoveParameter.Location = new Point(576, 446);
+            Btn_RemoveParameter.Location = new Point(576, 468);
             Btn_RemoveParameter.Name = "Btn_RemoveParameter";
             Btn_RemoveParameter.Size = new Size(76, 23);
             Btn_RemoveParameter.TabIndex = 13;
@@ -1442,7 +1503,7 @@ namespace Fhir.QueryBuilder
             // 
             // txt_Message
             // 
-            txt_Message.Location = new Point(762, 90);
+            txt_Message.Location = new Point(762, 112);
             txt_Message.Multiline = true;
             txt_Message.Name = "txt_Message";
             txt_Message.ScrollBars = ScrollBars.Vertical;
@@ -1452,7 +1513,7 @@ namespace Fhir.QueryBuilder
             // label11
             // 
             label11.AutoSize = true;
-            label11.Location = new Point(763, 66);
+            label11.Location = new Point(763, 88);
             label11.Name = "label11";
             label11.Size = new Size(41, 15);
             label11.TabIndex = 18;
@@ -1460,7 +1521,7 @@ namespace Fhir.QueryBuilder
             // 
             // Btn_TreeView
             // 
-            Btn_TreeView.Location = new Point(810, 61);
+            Btn_TreeView.Location = new Point(810, 83);
             Btn_TreeView.Name = "Btn_TreeView";
             Btn_TreeView.Size = new Size(99, 23);
             Btn_TreeView.TabIndex = 19;
@@ -1471,7 +1532,7 @@ namespace Fhir.QueryBuilder
             // Btn_BundleHelper
             // 
             Btn_BundleHelper.Enabled = false;
-            Btn_BundleHelper.Location = new Point(1081, 61);
+            Btn_BundleHelper.Location = new Point(1081, 83);
             Btn_BundleHelper.Name = "Btn_BundleHelper";
             Btn_BundleHelper.Size = new Size(98, 23);
             Btn_BundleHelper.TabIndex = 20;
@@ -1481,7 +1542,7 @@ namespace Fhir.QueryBuilder
             // Clb_Include
             // 
             Clb_Include.FormattingEnabled = true;
-            Clb_Include.Location = new Point(16, 479);
+            Clb_Include.Location = new Point(16, 501);
             Clb_Include.Name = "Clb_Include";
             Clb_Include.Size = new Size(202, 220);
             Clb_Include.TabIndex = 21;
@@ -1489,7 +1550,7 @@ namespace Fhir.QueryBuilder
             // label12
             // 
             label12.AutoSize = true;
-            label12.Location = new Point(16, 461);
+            label12.Location = new Point(16, 483);
             label12.Name = "label12";
             label12.Size = new Size(53, 15);
             label12.TabIndex = 22;
@@ -1498,7 +1559,7 @@ namespace Fhir.QueryBuilder
             // Clb_Revinclude
             // 
             Clb_Revinclude.FormattingEnabled = true;
-            Clb_Revinclude.Location = new Point(228, 479);
+            Clb_Revinclude.Location = new Point(228, 501);
             Clb_Revinclude.Name = "Clb_Revinclude";
             Clb_Revinclude.Size = new Size(343, 220);
             Clb_Revinclude.TabIndex = 23;
@@ -1506,7 +1567,7 @@ namespace Fhir.QueryBuilder
             // label17
             // 
             label17.AutoSize = true;
-            label17.Location = new Point(228, 461);
+            label17.Location = new Point(228, 483);
             label17.Name = "label17";
             label17.Size = new Size(70, 15);
             label17.TabIndex = 24;
@@ -1515,7 +1576,7 @@ namespace Fhir.QueryBuilder
             // Ckb_includeAll
             // 
             Ckb_includeAll.AutoSize = true;
-            Ckb_includeAll.Location = new Point(75, 460);
+            Ckb_includeAll.Location = new Point(75, 482);
             Ckb_includeAll.Name = "Ckb_includeAll";
             Ckb_includeAll.Size = new Size(39, 19);
             Ckb_includeAll.TabIndex = 25;
@@ -1525,7 +1586,7 @@ namespace Fhir.QueryBuilder
             // Ckb_RevincludeAll
             // 
             Ckb_RevincludeAll.AutoSize = true;
-            Ckb_RevincludeAll.Location = new Point(304, 460);
+            Ckb_RevincludeAll.Location = new Point(304, 482);
             Ckb_RevincludeAll.Name = "Ckb_RevincludeAll";
             Ckb_RevincludeAll.Size = new Size(39, 19);
             Ckb_RevincludeAll.TabIndex = 26;
@@ -1534,7 +1595,7 @@ namespace Fhir.QueryBuilder
             // 
             // Txt_SearchUrl
             // 
-            Txt_SearchUrl.Location = new Point(52, 716);
+            Txt_SearchUrl.Location = new Point(52, 738);
             Txt_SearchUrl.Name = "Txt_SearchUrl";
             Txt_SearchUrl.Size = new Size(519, 23);
             Txt_SearchUrl.TabIndex = 27;
@@ -1542,7 +1603,7 @@ namespace Fhir.QueryBuilder
             // label18
             // 
             label18.AutoSize = true;
-            label18.Location = new Point(16, 719);
+            label18.Location = new Point(16, 741);
             label18.Name = "label18";
             label18.Size = new Size(30, 15);
             label18.TabIndex = 28;
@@ -1550,7 +1611,7 @@ namespace Fhir.QueryBuilder
             // 
             // Btn_Search
             // 
-            Btn_Search.Location = new Point(658, 715);
+            Btn_Search.Location = new Point(658, 737);
             Btn_Search.Name = "Btn_Search";
             Btn_Search.Size = new Size(75, 23);
             Btn_Search.TabIndex = 29;
@@ -1561,7 +1622,7 @@ namespace Fhir.QueryBuilder
             // Btn_Copy
             // 
             Btn_Copy.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            Btn_Copy.Location = new Point(939, 705);
+            Btn_Copy.Location = new Point(939, 727);
             Btn_Copy.Name = "Btn_Copy";
             Btn_Copy.Size = new Size(75, 23);
             Btn_Copy.TabIndex = 30;
@@ -1572,7 +1633,7 @@ namespace Fhir.QueryBuilder
             // Btn_Save
             // 
             Btn_Save.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            Btn_Save.Location = new Point(1022, 705);
+            Btn_Save.Location = new Point(1022, 727);
             Btn_Save.Name = "Btn_Save";
             Btn_Save.Size = new Size(75, 23);
             Btn_Save.TabIndex = 31;
@@ -1582,7 +1643,7 @@ namespace Fhir.QueryBuilder
             // 
             // Btn_CreateUrl
             // 
-            Btn_CreateUrl.Location = new Point(577, 716);
+            Btn_CreateUrl.Location = new Point(577, 738);
             Btn_CreateUrl.Name = "Btn_CreateUrl";
             Btn_CreateUrl.Size = new Size(75, 23);
             Btn_CreateUrl.TabIndex = 32;
@@ -1593,7 +1654,7 @@ namespace Fhir.QueryBuilder
             // Btn_Exit
             // 
             Btn_Exit.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            Btn_Exit.Location = new Point(1105, 705);
+            Btn_Exit.Location = new Point(1105, 727);
             Btn_Exit.Name = "Btn_Exit";
             Btn_Exit.Size = new Size(75, 23);
             Btn_Exit.TabIndex = 37;
@@ -1603,7 +1664,7 @@ namespace Fhir.QueryBuilder
             // 
             // trv_Message
             // 
-            trv_Message.Location = new Point(762, 90);
+            trv_Message.Location = new Point(762, 112);
             trv_Message.Name = "trv_Message";
             trv_Message.Size = new Size(417, 609);
             trv_Message.TabIndex = 33;
@@ -1622,7 +1683,7 @@ namespace Fhir.QueryBuilder
             // Btn_RemoveAllParameter
             // 
             Btn_RemoveAllParameter.Enabled = false;
-            Btn_RemoveAllParameter.Location = new Point(658, 446);
+            Btn_RemoveAllParameter.Location = new Point(658, 468);
             Btn_RemoveAllParameter.Name = "Btn_RemoveAllParameter";
             Btn_RemoveAllParameter.Size = new Size(98, 23);
             Btn_RemoveAllParameter.TabIndex = 35;
@@ -1633,7 +1694,7 @@ namespace Fhir.QueryBuilder
             // tab_LastControl
             // 
             tab_LastControl.Controls.Add(tap_Modifying);
-            tab_LastControl.Location = new Point(576, 479);
+            tab_LastControl.Location = new Point(576, 501);
             tab_LastControl.Name = "tab_LastControl";
             tab_LastControl.SelectedIndex = 0;
             tab_LastControl.Size = new Size(180, 188);
@@ -1700,6 +1761,12 @@ namespace Fhir.QueryBuilder
             Controls.Add(Btn_Connect);
             Controls.Add(txt_FhirUrl);
             Controls.Add(label1);
+            Controls.Add(lab_FhirActive);
+            Controls.Add(lab_FhirActLbl);
+            Controls.Add(lab_FhirDetected);
+            Controls.Add(lab_FhirDetLbl);
+            Controls.Add(Cob_FhirVersion);
+            Controls.Add(lab_FhirVerDecl);
             Name = "NewMainForm";
             Padding = new Padding(1);
             Text = "FHIR Query Builder";
@@ -1756,6 +1823,12 @@ namespace Fhir.QueryBuilder
         private Label label2;
         private Button Btn_GetToken;
         private ComboBox Cob_Resource;
+        private Label lab_FhirVerDecl;
+        private ComboBox Cob_FhirVersion;
+        private Label lab_FhirDetLbl;
+        private Label lab_FhirDetected;
+        private Label lab_FhirActLbl;
+        private Label lab_FhirActive;
         private TabControl tabControl1;
         private TabPage tap_Common;
         private TabPage tap_Resource;

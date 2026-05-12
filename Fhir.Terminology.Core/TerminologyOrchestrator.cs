@@ -1,11 +1,13 @@
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using Fhir.Resources.R5;
 using Task = System.Threading.Tasks.Task;
 using Fhir.TypeFramework.Bases;
 using Fhir.TypeFramework.DataTypes;
 using Fhir.TypeFramework.DataTypes.PrimitiveTypes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Fhir.Terminology.Core;
 
@@ -22,11 +24,25 @@ public sealed record FhirOperationResult(int HttpStatus, string ContentType, str
 public sealed class TerminologyOrchestrator(
     ITerminologyRepository repository,
     IRemoteTerminologyGateway remote,
+    IOptions<TerminologyServerOptions> terminologyOptions,
     ILogger<TerminologyOrchestrator> logger)
 {
     private readonly ITerminologyRepository _repository = repository;
     private readonly IRemoteTerminologyGateway _remote = remote;
+    private readonly TerminologyServerOptions _terminologyOptions = terminologyOptions.Value;
     private readonly ILogger<TerminologyOrchestrator> _logger = logger;
+
+    /// <summary>讀取／術語操作：未指定時依伺服器 <see cref="TerminologyServerOptions.FhirVersionLabel"/>。</summary>
+    private string ResolveServerFhirSpecVersion(string? queryOrNull) =>
+        FhirSpecVersionNormalizer.Normalize(
+            string.IsNullOrWhiteSpace(queryOrNull) ? _terminologyOptions.FhirVersionLabel : queryOrNull);
+
+    /// <summary>管理匯入：未指定時依 <see cref="TerminologyServerOptions.GetEffectiveDefaultImportFhirSpecVersion"/>。</summary>
+    private string ResolveImportFhirSpecVersion(string? queryOrNull) =>
+        FhirSpecVersionNormalizer.Normalize(
+            string.IsNullOrWhiteSpace(queryOrNull)
+                ? _terminologyOptions.GetEffectiveDefaultImportFhirSpecVersion()
+                : queryOrNull);
 
     public Task<FhirOperationResult> MetadataCapabilityAsync(CancellationToken ct)
     {
@@ -40,9 +56,21 @@ public sealed class TerminologyOrchestrator(
         return Ok(tc);
     }
 
-    public async Task<FhirOperationResult> SearchAsync(string resourceType, TerminologySearchParameters p, CancellationToken ct)
+    public async Task<FhirOperationResult> SearchAsync(string resourceType, TerminologySearchParameters p, string? fhirSpecVersionQuery, CancellationToken ct)
     {
-        var rows = await _repository.SearchAsync(resourceType, p, ct);
+        var merged = string.IsNullOrWhiteSpace(fhirSpecVersionQuery)
+            ? p
+            : new TerminologySearchParameters
+            {
+                Url = p.Url,
+                Version = p.Version,
+                Name = p.Name,
+                Title = p.Title,
+                Status = p.Status,
+                FhirSpecVersion = ResolveServerFhirSpecVersion(fhirSpecVersionQuery),
+            };
+
+        var rows = await _repository.SearchAsync(resourceType, merged, ct);
         var bundle = new Bundle
         {
             Type = new FhirCode("searchset"),
@@ -66,16 +94,20 @@ public sealed class TerminologyOrchestrator(
         return Ok(bundle);
     }
 
-    public async Task<FhirOperationResult?> ReadAsync(string resourceType, string id, CancellationToken ct)
+    public async Task<FhirOperationResult?> ReadAsync(string resourceType, string id, string? fhirSpecVersionQuery, CancellationToken ct)
     {
-        var row = await _repository.GetAsync(resourceType, id, ct);
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+        var row = await _repository.GetAsync(resourceType, id, fv, ct);
         if (row is null)
             return Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound($"{resourceType}/{id} not found"));
 
         return Ok(DeserializeKnown(resourceType, row.RawJson)!);
     }
 
-    public async Task<FhirOperationResult> CreateAsync(string resourceType, string json, CancellationToken ct)
+    public Task<FhirOperationResult> CreateAsync(string resourceType, string json, CancellationToken ct)
+        => CreateAsync(resourceType, json, ResolveServerFhirSpecVersion(null), ct);
+
+    private async Task<FhirOperationResult> CreateAsync(string resourceType, string json, string fhirSpecVersion, CancellationToken ct)
     {
         var resource = DeserializeKnown(resourceType, json);
         if (resource is null)
@@ -88,16 +120,59 @@ public sealed class TerminologyOrchestrator(
         if (!string.Equals(rt, resourceType, StringComparison.Ordinal))
             return Fail(HttpStatusCode.BadRequest, OperationOutcomeFactory.Error($"resourceType mismatch: expected {resourceType}"));
 
-        var stored = await _repository.CreateAsync(json, ct);
+        var stored = await _repository.CreateAsync(json, fhirSpecVersion, ct);
         var created = DeserializeKnown(resourceType, stored.RawJson);
         if (created is null)
             return Fail(HttpStatusCode.InternalServerError, OperationOutcomeFactory.Error("Round-trip serialize failed"));
         return new FhirOperationResult((int)HttpStatusCode.Created, "application/fhir+json", TerminologyJson.Serialize((Base)created));
     }
 
-    public async Task<FhirOperationResult> UpdateAsync(string resourceType, string id, string json, CancellationToken ct)
+    /// <summary>
+    /// 管理 UI／批次貼上：若為含 Id 的 Bundle 或單筆術語資源 JSON，則展開並 <see cref="ITerminologyRepository.BulkUpsertAsync"/>；
+    /// 否則依傳入之資源類型走 <see cref="CreateAsync"/>（例如單筆且伺服器須補 <c>id</c>）。
+    /// </summary>
+    public async Task<FhirOperationResult> ImportFromAdminPageAsync(string selectedResourceType, string json, string? importFhirSpecVersionQuery, CancellationToken ct)
     {
-        var updated = await _repository.UpdateAsync(resourceType, id, json, ct);
+        var pieces = TerminologyImportJsonExtractor.ExtractImportablePieces(json, out var extractSkipReason);
+        if (pieces.Count > 0)
+        {
+            await _repository.BulkUpsertAsync(pieces, ResolveImportFhirSpecVersion(importFhirSpecVersionQuery), ct);
+            var msg = $"已匯入 {pieces.Count} 筆資源（術語或 StructureDefinition）。可至資源列表確認。";
+            return new FhirOperationResult(
+                (int)HttpStatusCode.OK,
+                "application/fhir+json",
+                TerminologyJson.Serialize(OperationOutcomeFactory.Information(msg)));
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("resourceType", out var rtEl)
+                && string.Equals(rtEl.GetString(), "Bundle", StringComparison.Ordinal))
+            {
+                return Fail(
+                    HttpStatusCode.BadRequest,
+                    OperationOutcomeFactory.Error(
+                        extractSkipReason
+                        ?? "此 Bundle 內沒有可匯入的 CodeSystem／ValueSet／ConceptMap／StructureDefinition，或項目缺少邏輯 id。"));
+            }
+
+            return await CreateAsync(
+                selectedResourceType,
+                json,
+                ResolveImportFhirSpecVersion(importFhirSpecVersionQuery),
+                ct);
+        }
+        catch (JsonException ex)
+        {
+            return Fail(HttpStatusCode.BadRequest, OperationOutcomeFactory.Error("JSON 解析失敗：" + ex.Message));
+        }
+    }
+
+    public async Task<FhirOperationResult> UpdateAsync(string resourceType, string id, string json, string? fhirSpecVersionQuery, CancellationToken ct)
+    {
+        var updated = await _repository.UpdateAsync(resourceType, id, ResolveServerFhirSpecVersion(fhirSpecVersionQuery), json, ct);
         if (updated is null)
             return Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound($"{resourceType}/{id}"));
 
@@ -105,9 +180,9 @@ public sealed class TerminologyOrchestrator(
         return Ok(resource);
     }
 
-    public async Task<FhirOperationResult> DeleteAsync(string resourceType, string id, CancellationToken ct)
+    public async Task<FhirOperationResult> DeleteAsync(string resourceType, string id, string? fhirSpecVersionQuery, CancellationToken ct)
     {
-        var ok = await _repository.DeleteAsync(resourceType, id, ct);
+        var ok = await _repository.DeleteAsync(resourceType, id, ResolveServerFhirSpecVersion(fhirSpecVersionQuery), ct);
         if (!ok)
             return Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound($"{resourceType}/{id}"));
 
@@ -120,14 +195,16 @@ public sealed class TerminologyOrchestrator(
         string? filter,
         int? offset,
         int? count,
+        string? fhirSpecVersionQuery,
         CancellationToken ct)
     {
         var query = BuildExpandQuery(valueSetId, urlParam, filter, offset, count);
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
 
         ValueSet? vs = null;
         if (!string.IsNullOrEmpty(valueSetId))
         {
-            var row = await _repository.GetAsync("ValueSet", valueSetId, ct);
+            var row = await _repository.GetAsync("ValueSet", valueSetId, fv, ct);
             if (row is null)
             {
                 var rf = await _remote.ForwardAsync($"ValueSet/$expand{query}", HttpMethod.Get, null, ct);
@@ -138,7 +215,7 @@ public sealed class TerminologyOrchestrator(
         }
         else if (!string.IsNullOrEmpty(urlParam))
         {
-            var row = await _repository.FindByUrlAsync("ValueSet", urlParam, version: null, ct);
+            var row = await _repository.FindByUrlAsync("ValueSet", urlParam, version: null, fv, ct);
             if (row is null)
             {
                 var rf = await _remote.ForwardAsync($"ValueSet/$expand{query}", HttpMethod.Get, null, ct);
@@ -157,7 +234,7 @@ public sealed class TerminologyOrchestrator(
 
         try
         {
-            var expanded = await ExpandValueSetLocalAsync(vs, filter, offset, count, ct);
+            var expanded = await ExpandValueSetLocalAsync(vs, filter, offset, count, fv, ct);
             return Ok(expanded);
         }
         catch (Exception ex)
@@ -185,7 +262,7 @@ public sealed class TerminologyOrchestrator(
         return q.Count == 0 ? "" : "?" + string.Join("&", q);
     }
 
-    private async Task<ValueSet> ExpandValueSetLocalAsync(ValueSet vs, string? filter, int? offset, int? count, CancellationToken ct)
+    private async Task<ValueSet> ExpandValueSetLocalAsync(ValueSet vs, string? filter, int? offset, int? count, string codeSystemFhirSpecVersion, CancellationToken ct)
     {
         if (vs.Compose is null)
         {
@@ -204,8 +281,8 @@ public sealed class TerminologyOrchestrator(
             if (sys is null)
                 continue;
 
-            var csRow = await _repository.FindByUrlAsync("CodeSystem", sys, FhirPrimitive.String(inc.Version), ct)
-                         ?? await _repository.FindByUrlAsync("CodeSystem", sys, null, ct);
+            var csRow = await _repository.FindByUrlAsync("CodeSystem", sys, FhirPrimitive.String(inc.Version), codeSystemFhirSpecVersion, ct)
+                         ?? await _repository.FindByUrlAsync("CodeSystem", sys, null, codeSystemFhirSpecVersion, ct);
 
             if (csRow is null)
                 throw new InvalidOperationException($"CodeSystem not found for system {sys}");
@@ -294,6 +371,7 @@ public sealed class TerminologyOrchestrator(
         string? code,
         string? system,
         string? display,
+        string? fhirSpecVersionQuery,
         CancellationToken ct)
     {
         var q = BuildValidateVsQuery(url, code, system, display);
@@ -301,21 +379,23 @@ public sealed class TerminologyOrchestrator(
         if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(system))
             return Fail(HttpStatusCode.BadRequest, OperationOutcomeFactory.Error("code and system are required"));
 
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+
         ValueSet? vs = null;
         if (!string.IsNullOrEmpty(valueSetId))
         {
-            var row = await _repository.GetAsync("ValueSet", valueSetId, ct);
+            var row = await _repository.GetAsync("ValueSet", valueSetId, fv, ct);
             vs = row is null ? null : DeserializeKnown(ValueSet.ResourceTypeValue, row.RawJson) as ValueSet;
         }
         else if (!string.IsNullOrEmpty(url))
         {
-            var row = await _repository.FindByUrlAsync("ValueSet", url, null, ct);
+            var row = await _repository.FindByUrlAsync("ValueSet", url, null, fv, ct);
             vs = row is null ? null : DeserializeKnown(ValueSet.ResourceTypeValue, row.RawJson) as ValueSet;
         }
 
         if (vs is not null)
         {
-            var expanded = await ExpandValueSetLocalAsync(vs, filter: null, offset: null, count: null, ct);
+            var expanded = await ExpandValueSetLocalAsync(vs, filter: null, offset: null, count: null, fv, ct);
             var ok = expanded.Expansion?.Contains?.Any(c =>
                 FhirPrimitive.Code(c.Code) == code &&
                 (FhirPrimitive.Uri(c.System) == system)) == true;
@@ -356,7 +436,7 @@ public sealed class TerminologyOrchestrator(
         if (match is null)
             return Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound("No binding registry entry for profile/path"));
 
-        return await ValidateCodeValueSetAsync(null, match.ValueSetCanonical, code, system, display, ct);
+        return await ValidateCodeValueSetAsync(null, match.ValueSetCanonical, code, system, display, null, ct);
     }
 
     private static string BuildValidateVsQuery(string? url, string? code, string? system, string? display)
@@ -373,7 +453,7 @@ public sealed class TerminologyOrchestrator(
         return q.Count == 0 ? "" : "?" + string.Join("&", q);
     }
 
-    public async Task<FhirOperationResult> ValidateCodeCodeSystemAsync(string? codeSystemId, string? url, string code, string? system, string? display, CancellationToken ct)
+    public async Task<FhirOperationResult> ValidateCodeCodeSystemAsync(string? codeSystemId, string? url, string code, string? system, string? display, string? fhirSpecVersionQuery, CancellationToken ct)
     {
         var qs = new List<string>();
         if (!string.IsNullOrEmpty(url))
@@ -383,11 +463,13 @@ public sealed class TerminologyOrchestrator(
             qs.Add("system=" + Uri.EscapeDataString(system));
         var q = qs.Count == 0 ? "" : "?" + string.Join("&", qs);
 
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+
         StoredResourceRow? row = null;
         if (!string.IsNullOrEmpty(codeSystemId))
-            row = await _repository.GetAsync("CodeSystem", codeSystemId, ct);
+            row = await _repository.GetAsync("CodeSystem", codeSystemId, fv, ct);
         else if (!string.IsNullOrEmpty(url))
-            row = await _repository.FindByUrlAsync("CodeSystem", url, null, ct);
+            row = await _repository.FindByUrlAsync("CodeSystem", url, null, fv, ct);
 
         if (row is not null)
         {
@@ -405,7 +487,7 @@ public sealed class TerminologyOrchestrator(
             : Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound("CodeSystem not found"));
     }
 
-    public async Task<FhirOperationResult> LookupAsync(string? codeSystemId, string? system, string code, string? version, CancellationToken ct)
+    public async Task<FhirOperationResult> LookupAsync(string? codeSystemId, string? system, string code, string? version, string? fhirSpecVersionQuery, CancellationToken ct)
     {
         var q = new List<string>();
         if (!string.IsNullOrEmpty(system))
@@ -415,12 +497,14 @@ public sealed class TerminologyOrchestrator(
             q.Add("version=" + Uri.EscapeDataString(version));
         var query = "?" + string.Join("&", q);
 
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+
         StoredResourceRow? row = null;
         if (!string.IsNullOrEmpty(codeSystemId))
-            row = await _repository.GetAsync("CodeSystem", codeSystemId, ct);
+            row = await _repository.GetAsync("CodeSystem", codeSystemId, fv, ct);
         else if (!string.IsNullOrEmpty(system))
-            row = await _repository.FindByUrlAsync("CodeSystem", system, version, ct)
-                  ?? await _repository.FindByUrlAsync("CodeSystem", system, null, ct);
+            row = await _repository.FindByUrlAsync("CodeSystem", system, version, fv, ct)
+                  ?? await _repository.FindByUrlAsync("CodeSystem", system, null, fv, ct);
 
         if (row is not null)
         {
@@ -451,7 +535,7 @@ public sealed class TerminologyOrchestrator(
             : Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound("CodeSystem not found"));
     }
 
-    public async Task<FhirOperationResult> SubsumesAsync(string? codeSystemId, string system, string codeA, string codeB, string? version, CancellationToken ct)
+    public async Task<FhirOperationResult> SubsumesAsync(string? codeSystemId, string system, string codeA, string codeB, string? version, string? fhirSpecVersionQuery, CancellationToken ct)
     {
         var q = new List<string>
         {
@@ -463,12 +547,14 @@ public sealed class TerminologyOrchestrator(
             q.Add("version=" + Uri.EscapeDataString(version));
         var query = "?" + string.Join("&", q);
 
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+
         StoredResourceRow? row = null;
         if (!string.IsNullOrEmpty(codeSystemId))
-            row = await _repository.GetAsync("CodeSystem", codeSystemId, ct);
+            row = await _repository.GetAsync("CodeSystem", codeSystemId, fv, ct);
         else
-            row = await _repository.FindByUrlAsync("CodeSystem", system, version, ct)
-                  ?? await _repository.FindByUrlAsync("CodeSystem", system, null, ct);
+            row = await _repository.FindByUrlAsync("CodeSystem", system, version, fv, ct)
+                  ?? await _repository.FindByUrlAsync("CodeSystem", system, null, fv, ct);
 
         if (row is not null)
         {
@@ -489,7 +575,7 @@ public sealed class TerminologyOrchestrator(
             : Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound("CodeSystem not found"));
     }
 
-    public async Task<FhirOperationResult> TranslateAsync(string? conceptMapId, string? url, string sourceCode, string sourceSystem, string? targetSystem, CancellationToken ct)
+    public async Task<FhirOperationResult> TranslateAsync(string? conceptMapId, string? url, string sourceCode, string sourceSystem, string? targetSystem, string? fhirSpecVersionQuery, CancellationToken ct)
     {
         var q = new List<string> { "code=" + Uri.EscapeDataString(sourceCode), "system=" + Uri.EscapeDataString(sourceSystem) };
         if (!string.IsNullOrEmpty(targetSystem))
@@ -498,15 +584,17 @@ public sealed class TerminologyOrchestrator(
             q.Add("url=" + Uri.EscapeDataString(url));
         var query = "?" + string.Join("&", q);
 
+        var fv = ResolveServerFhirSpecVersion(fhirSpecVersionQuery);
+
         ConceptMap? cm = null;
         if (!string.IsNullOrEmpty(conceptMapId))
         {
-            var row = await _repository.GetAsync("ConceptMap", conceptMapId, ct);
+            var row = await _repository.GetAsync("ConceptMap", conceptMapId, fv, ct);
             cm = row is null ? null : DeserializeKnown(ConceptMap.ResourceTypeValue, row.RawJson) as ConceptMap;
         }
         else if (!string.IsNullOrEmpty(url))
         {
-            var row = await _repository.FindByUrlAsync("ConceptMap", url, null, ct);
+            var row = await _repository.FindByUrlAsync("ConceptMap", url, null, fv, ct);
             cm = row is null ? null : DeserializeKnown(ConceptMap.ResourceTypeValue, row.RawJson) as ConceptMap;
         }
 
@@ -629,6 +717,33 @@ public sealed class TerminologyOrchestrator(
         return new FhirOperationResult((int)HttpStatusCode.Created, "application/fhir+json", TerminologyJson.Serialize(p));
     }
 
+    /// <summary>
+    /// 依已匯入之 StructureDefinition（同 FHIR 規格版本列）擷取主 binding，覆寫 Binding 登錄中同 <c>StructureDefinition.url</c> 之全部列，
+    /// 供 <c>ValueSet/$validate-code?profile&amp;path</c> 使用。
+    /// </summary>
+    public async Task<FhirOperationResult> SyncBindingRegistryFromStoredStructureDefinitionAsync(string logicalId, string fhirSpecVersion, CancellationToken ct)
+    {
+        var fv = FhirSpecVersionNormalizer.Normalize(fhirSpecVersion);
+        var row = await _repository.GetAsync("StructureDefinition", logicalId, fv, ct);
+        if (row is null)
+            return Fail(HttpStatusCode.NotFound, OperationOutcomeFactory.NotFound($"StructureDefinition/{logicalId}"));
+
+        var profileUrl = StructureDefinitionBindingDiscoverer.TryGetCanonicalUrl(row.RawJson);
+        if (string.IsNullOrEmpty(profileUrl))
+            return Fail(HttpStatusCode.BadRequest, OperationOutcomeFactory.Error("StructureDefinition.url is missing"));
+
+        var primaries = StructureDefinitionBindingDiscoverer.ListPrimaryBindingsForRegistry(row.RawJson);
+        var registryRows = primaries
+            .Where(p => !string.IsNullOrWhiteSpace(p.ValueSetCanonical))
+            .Select(p => new BindingRegistryRow(Guid.Empty, profileUrl, p.ElementPath, p.ValueSetCanonical.Trim(), p.Strength.Trim()))
+            .ToList();
+
+        await _repository.ReplaceBindingsForStructureDefinitionAsync(profileUrl, registryRows, ct);
+
+        var msg = $"已將 {registryRows.Count} 筆綁定寫入登錄（profile：{profileUrl}）。";
+        return new FhirOperationResult((int)HttpStatusCode.OK, "application/fhir+json", TerminologyJson.Serialize(OperationOutcomeFactory.Information(msg)));
+    }
+
     public async Task<FhirOperationResult> ListBindingsAsync(CancellationToken ct)
     {
         var rows = await _repository.ListBindingsAsync(ct);
@@ -662,7 +777,7 @@ public sealed class TerminologyOrchestrator(
         var systems = await _repository.SearchAsync("CodeSystem", new TerminologySearchParameters(), ct);
         var tc = new TerminologyCapabilities
         {
-            Url = new FhirUri("http://localhost/fhir/terminology-capabilities"),
+            Url = new FhirUri(_terminologyOptions.GetTerminologyCapabilitiesUrl()),
             Name = new FhirString("TerminologyServer"),
             Title = new FhirString("FHIR Terminology"),
             Status = new FhirCode("active"),
@@ -689,29 +804,33 @@ public sealed class TerminologyOrchestrator(
                 ];
             }
 
+            var contentLabel = cs.Content?.StringValue;
+            if (string.IsNullOrEmpty(contentLabel))
+                contentLabel = "not-present";
+
             tc.CodeSystem!.Add(new TerminologyCapabilities.CodeSystemComponent
             {
                 Uri = new FhirCanonical(urlStr),
                 Version = versions,
-                Content = new FhirCode("complete"),
+                Content = new FhirCode(contentLabel),
             });
         }
 
         return tc;
     }
 
-    private static CapabilityStatement BuildCapabilityStatement()
+    private CapabilityStatement BuildCapabilityStatement()
     {
         return new CapabilityStatement
         {
-            Url = new FhirUri("http://localhost/fhir/metadata"),
+            Url = new FhirUri(_terminologyOptions.GetCapabilityStatementUrl()),
             Name = new FhirString("TerminologyService"),
             Title = new FhirString("FHIR Terminology Service"),
             Status = new FhirCode("active"),
             Date = new FhirDateTime(DateTime.UtcNow.ToString("yyyy-MM-dd")),
             Description = new FhirMarkdown("Terminology server per FHIR R5"),
             Kind = new FhirCode("instance"),
-            FhirVersion = new FhirCode("5.0.0"),
+            FhirVersion = new FhirCode(_terminologyOptions.FhirVersionLabel),
             Format = [new FhirCode("json")],
             Rest =
             [
@@ -723,6 +842,7 @@ public sealed class TerminologyOrchestrator(
                         CapabilityResources.CodeSystem(),
                         CapabilityResources.ValueSet(),
                         CapabilityResources.ConceptMap(),
+                        CapabilityResources.StructureDefinition(),
                     ],
                 },
             ],
@@ -735,6 +855,7 @@ public sealed class TerminologyOrchestrator(
             CodeSystem.ResourceTypeValue => TerminologyJson.Deserialize<CodeSystem>(json),
             ValueSet.ResourceTypeValue => TerminologyJson.Deserialize<ValueSet>(json),
             ConceptMap.ResourceTypeValue => TerminologyJson.Deserialize<ConceptMap>(json),
+            StructureDefinition.ResourceTypeValue => TerminologyJson.Deserialize<StructureDefinition>(json),
             _ => TerminologyJson.DeserializeResource(json) as DomainResource,
         };
 
@@ -743,6 +864,7 @@ public sealed class TerminologyOrchestrator(
         CodeSystem => CodeSystem.ResourceTypeValue,
         ValueSet => ValueSet.ResourceTypeValue,
         ConceptMap => ConceptMap.ResourceTypeValue,
+        StructureDefinition => StructureDefinition.ResourceTypeValue,
         _ => "",
     };
 

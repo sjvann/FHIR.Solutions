@@ -1,4 +1,6 @@
 ﻿using Fhir.QueryBuilder.Common;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 
 namespace Fhir.QueryBuilder.Services.Interfaces;
 
@@ -14,7 +16,7 @@ public interface IServerCompatibilityService
 
     Task<OperationSupportReport> CheckOperationSupportAsync(string serverUrl, string operation);
 
-    Task<Fhir.Resources.R5.CapabilityStatement?> GetCapabilityStatementAsync(string serverUrl);
+    Task<CapabilityParseResult?> GetCapabilityStatementAsync(string serverUrl);
 
     Task<FhirVersion?> DetectFhirVersionAsync(string serverUrl);
 

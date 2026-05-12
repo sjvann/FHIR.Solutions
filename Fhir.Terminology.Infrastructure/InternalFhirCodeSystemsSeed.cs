@@ -21,6 +21,7 @@ public static class InternalFhirCodeSystemsSeed
     public static async Task EnsureRegisteredAsync(
         TerminologyDbContext db,
         ITerminologyRepository repository,
+        string seedFhirSpecVersion,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -36,13 +37,19 @@ public static class InternalFhirCodeSystemsSeed
 
             var url = UrlPrefix + slug;
             var urlTaken = await db.TerminologyResources.AsNoTracking()
-                .AnyAsync(x => x.ResourceType == "CodeSystem" && x.Url == url, cancellationToken);
+                .AnyAsync(
+                    x => x.ResourceType == "CodeSystem" && x.Url == url && x.FhirSpecVersion == seedFhirSpecVersion,
+                    cancellationToken);
             if (urlTaken)
                 continue;
 
             var logicalId = BuildLogicalId(slug);
             var idTaken = await db.TerminologyResources.AsNoTracking()
-                .AnyAsync(x => x.ResourceType == "CodeSystem" && x.LogicalId == logicalId, cancellationToken);
+                .AnyAsync(
+                    x => x.ResourceType == "CodeSystem"
+                        && x.LogicalId == logicalId
+                        && x.FhirSpecVersion == seedFhirSpecVersion,
+                    cancellationToken);
             if (idTaken)
             {
                 logger.LogWarning(
@@ -52,7 +59,7 @@ public static class InternalFhirCodeSystemsSeed
             }
 
             var json = BuildStubJson(logicalId, slug, url);
-            await repository.CreateAsync(json, cancellationToken);
+            await repository.CreateAsync(json, seedFhirSpecVersion, cancellationToken);
             inserted++;
         }
 

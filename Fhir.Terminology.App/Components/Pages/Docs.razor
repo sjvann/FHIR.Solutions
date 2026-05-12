@@ -9,7 +9,8 @@
 
     <h2 id="entry">1. 入口與工具</h2>
     <ul>
-        <li><strong><a href="/scalar/v1" target="_blank" rel="noopener noreferrer">Scalar REST 文件</a></strong>（<code>/scalar/v1</code>）：依 OpenAPI 試打所有 HTTP 端點；各操作已附<strong>中文摘要與說明</strong>（請展開操作檢視 Description）。</li>
+        <li><strong><a href="/admin/query">術語查詢（圖形介面）</a></strong>：在本站表單執行 <code>$expand</code>、<code>$lookup</code>、<code>$validate-code</code>、Binding 驗證、<code>$translate</code>、<code>$subsumes</code> 等，無需手動組 REST URL（仍與 <code>/fhir</code> 行為一致）。</li>
+        <li><strong><a href="/scalar/v1" target="_blank" rel="noopener noreferrer">Scalar REST 文件</a></strong>（<code>/scalar/v1</code>）：給程式整合或需完整 OpenAPI 時使用；依 OpenAPI 試打所有 HTTP 端點；各操作已附<strong>中文摘要與說明</strong>（請展開操作檢視 Description）。</li>
         <li><strong>OpenAPI JSON</strong>：<code>GET /openapi/v1.json</code>（給程式或匯入其他工具）。</li>
         <li><strong>健康檢查</strong>：<code>GET /health</code> → 本文 <code>ok</code>（非 FHIR）。</li>
         <li>若不需對外暴露 Scalar／OpenAPI，請設定 <strong><code>Terminology:EnableApiReference=false</code></strong>。</li>
@@ -51,9 +52,9 @@
         <li><strong>外部編碼系統登錄</strong>：若 <code>Terminology:SeedExternalCanonicalCodeSystems=true</code>，啟動時會為 HL7 常見 external URI（SNOMED、LOINC、RxNorm、UCUM 等）建立最小 <code>CodeSystem</code>（<code>content=not-present</code>，僅供識別 URI／OID，不含完整詞表）。已存在之 logical id 不會重複寫入。</li>
         <li><strong>內部（FHIR 規格）Code systems</strong>：若 <code>Terminology:SeedInternalFhirCodeSystems=true</code>，啟動時依內建清單為 <code>http://hl7.org/fhir/{slug}</code> 建立 stub（與 <a href="https://www.hl7.org/fhir/terminologies-systems.html" target="_blank" rel="noopener noreferrer">terminologies-systems.html</a> §4.3.0.2 對齊；約四百餘筆）。若某 <code>url</code> 已有 CodeSystem（例如示範 administrative-gender）則略過。</li>
         <li><strong>REST</strong>：前綴 <code>/fhir/admin/registry</code> — bindings／upstreams 的 GET、POST、DELETE（JSON 本文見 Scalar 說明）。</li>
-        <li><strong>Blazor</strong>：<a href="/admin/bindings">綁定登錄</a>、<a href="/admin/upstreams">上游端點</a>、<a href="/admin/resources">資源列表</a>。</li>
+        <li><strong>Blazor</strong>：<a href="/admin/query">術語查詢</a>、<a href="/admin/bindings">Binding 查詢／同步登錄</a>、<a href="/admin/upstreams">上游端點</a>、<a href="/admin/resources">資源列表</a>。</li>
         <li><strong>Binding</strong>：將 Profile URL + 元素 path 對應到 ValueSet canonical，供 <code>$validate-code?profile=&amp;path=</code> 使用。</li>
-        <li><strong>Upstream</strong>：<code>systemUriPrefix</code> 對應 Coding.system 前綴；<code>baseUrl</code> 須含 <code>/fhir</code>。</li>
+        <li><strong>Upstream</strong>：<code>systemUriPrefix</code> 對應 Coding.system 前綴；<code>baseUrl</code> 須含 <code>/fhir</code>。<a href="/admin/upstreams">上游頁</a>內附 <strong>LOINC（Tx.fhir.org）測試步驟</strong>與可點選之 <code>$lookup</code> 連結。</li>
     </ul>
 
     <h2 id="config">6. 組態摘要</h2>

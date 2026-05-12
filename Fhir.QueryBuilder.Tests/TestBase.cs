@@ -69,6 +69,8 @@ public abstract class TestBase : IDisposable
         return new Dictionary<string, string?>
         {
             ["Fhir.QueryBuilder:DefaultServerUrl"] = "https://test.fire.ly",
+            ["Fhir.QueryBuilder:DefaultFhirVersion"] = "R5",
+            ["Fhir.QueryBuilder:FhirVersionResolution"] = "0",
             ["Fhir.QueryBuilder:RequestTimeoutSeconds"] = "10",
             ["Fhir.QueryBuilder:EnableLogging"] = "true",
             ["Fhir.QueryBuilder:EnableCaching"] = "false",

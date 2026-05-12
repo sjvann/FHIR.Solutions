@@ -1,11 +1,18 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using Fhir.Auth.TokenServer.Configuration;
+using Fhir.VersionManager;
 
 namespace Fhir.QueryBuilder.Configuration
 {
     public class QueryBuilderAppSettings
     {
         public const string SectionName = "Fhir.QueryBuilder";
+
+        /// <summary>預設 FHIR 線別簡寫：R4、R4B、R5（與 <see cref="FhirVersionParser.ParseFromShortName"/> 一致）。</summary>
+        public string DefaultFhirVersion { get; set; } = "R5";
+
+        /// <summary>URL／metadata 與宣告版本合併策略。</summary>
+        public FhirVersionResolutionStrategy FhirVersionResolution { get; set; } = FhirVersionResolutionStrategy.PreferDetected;
 
         [Required]
         [Url]

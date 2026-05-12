@@ -16,6 +16,8 @@
 
         Title="FHIR Query Builder"
 
+        Icon="avares://Fhir.QueryBuilder.App.Avalonia/Assets/favicon.png"
+
         Width="1180"
 
         Height="820"
@@ -68,9 +70,18 @@
 
             <Setter Property="FontSize" Value="12.5" />
 
-            <Setter Property="Padding" Value="12,7,12,7" />
+            <Setter Property="Padding" Value="8,7,10,7" />
 
-            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Margin" Value="0,0,5,0" />
+
+        </Style>
+
+        <!-- Tab 內容區與標籤列左緣對齊（Fluent 預設 ContentPresenter 常有水平留白） -->
+        <Style Selector="TabControl.queryTabs TabItem /template/ ContentPresenter">
+
+            <Setter Property="Margin" Value="0" />
+
+            <Setter Property="Padding" Value="0" />
 
         </Style>
 
@@ -181,6 +192,38 @@
                     </Grid>
 
                 </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="12">
+
+                    <TextBlock Text="FHIR 宣告" VerticalAlignment="Center" />
+
+                    <ComboBox Width="92"
+
+                              MinHeight="34"
+
+                              VerticalAlignment="Center"
+
+                              ItemsSource="{Binding FhirVersionChoices}"
+
+                              SelectedItem="{Binding SelectedFhirVersionShort, Mode=TwoWay}" />
+
+                    <TextBlock Text="偵測" VerticalAlignment="Center" Opacity="0.75" />
+
+                    <TextBlock Text="{Binding DetectedFhirVersionDisplay}"
+
+                               VerticalAlignment="Center"
+
+                               FontWeight="SemiBold" />
+
+                    <TextBlock Text="作用" VerticalAlignment="Center" Opacity="0.75" />
+
+                    <TextBlock Text="{Binding ActiveFhirVersionDisplay}"
+
+                               VerticalAlignment="Center"
+
+                               FontWeight="SemiBold" />
+
+                </StackPanel>
 
                 <TextBox Watermark="Bearer access token（選填，Execute query 時附加 Authorization）"
 
@@ -424,15 +467,17 @@
 
               Margin="0,2,0,0"
 
-              ColumnDefinitions="1.65*,1*,1.65*">
+              ColumnDefinitions="1.38*,1.18*,1.38*">
 
             <Border Grid.Column="0"
 
-                    Margin="0,0,4,0"
+                    Margin="0,0,1,0"
+
+                    Padding="8"
 
                     Classes="card"
 
-                    MinWidth="240">
+                    MinWidth="220">
 
                 <TabControl Classes="queryTabs"
 
@@ -440,11 +485,13 @@
 
                     <TabItem Header="Search parameters">
 
-                        <Grid Margin="8">
+                        <Grid Margin="0,4,4,4">
 
                             <Border Classes="block"
 
-                                    MinHeight="220">
+                                    MinHeight="220"
+
+                                    Padding="2,8,8,8">
 
                                 <Grid ColumnDefinitions="*,*"
 
@@ -454,7 +501,7 @@
 
                                             Classes="block"
 
-                                            Padding="8">
+                                            Padding="6,8,8,8">
 
                                         <DockPanel LastChildFill="True">
 
@@ -474,11 +521,25 @@
 
                                                          SelectedItem="{Binding SelectedSearchParameter}">
 
+                                                    <ListBox.Styles>
+
+                                                        <Style Selector="ListBoxItem">
+
+                                                            <Setter Property="Padding" Value="6,1" />
+
+                                                            <Setter Property="MinHeight" Value="0" />
+
+                                                        </Style>
+
+                                                    </ListBox.Styles>
+
                                                     <ListBox.ItemTemplate>
 
                                                         <DataTemplate DataType="models:SearchParamModel">
 
-                                                            <TextBlock Text="{Binding DisplayText}" />
+                                                            <TextBlock Text="{Binding DisplayText}"
+
+                                                                       VerticalAlignment="Center" />
 
                                                         </DataTemplate>
 
@@ -494,7 +555,7 @@
 
                                     <Border Grid.Column="1"
 
-                                            Margin="12,0,0,0"
+                                            Margin="4,0,0,0"
 
                                             Classes="block"
 
@@ -544,11 +605,13 @@
 
             <Border Grid.Column="1"
 
-                    Margin="0,0,4,0"
+                    Margin="0,0,1,0"
+
+                    Padding="8"
 
                     Classes="card"
 
-                    MinWidth="154">
+                    MinWidth="140">
 
                 <Grid RowDefinitions="*,*">
 
@@ -606,7 +669,7 @@
 
                                             Spacing="10">
 
-                                    <CheckBox Content="Emit every listed path (same as WinForms “include all”)"
+                                    <CheckBox Content="Emit every listed path"
 
                                               IsChecked="{Binding IncludeTakeAll}" />
 
@@ -680,7 +743,9 @@
 
             <Border Grid.Column="2"
 
-                    Margin="4,0,0,0"
+                    Margin="1,0,0,0"
+
+                    Padding="8"
 
                     Classes="card"
 
@@ -836,9 +901,15 @@
 
                 <Image Grid.Column="0"
 
+                       Margin="0,0,2,0"
+
                        Source="avares://Fhir.QueryBuilder.App.Avalonia/Assets/ITRI_logo.jpg"
 
-                       Height="38"
+                       Height="36"
+
+                       MaxHeight="40"
+
+                       MaxWidth="220"
 
                        Stretch="Uniform"
 
@@ -846,7 +917,7 @@
 
                 <StackPanel Grid.Column="1"
 
-                            Margin="14,0,0,0"
+                            Margin="10,0,0,0"
 
                             VerticalAlignment="Center"
 
@@ -858,11 +929,31 @@
 
                                Text="© 工業技術研究院（ITRI）。版權所有。" />
 
-                    <TextBlock FontSize="11"
+                    <StackPanel Orientation="Horizontal"
 
-                               Opacity="0.7"
+                                Spacing="6"
 
-                               Text="FHIR Query Builder" />
+                                VerticalAlignment="Center">
+
+                        <Image Height="18"
+
+                               Width="18"
+
+                               Stretch="Uniform"
+
+                               VerticalAlignment="Center"
+
+                               Source="avares://Fhir.QueryBuilder.App.Avalonia/Assets/favicon.png" />
+
+                        <TextBlock FontSize="11"
+
+                                   Opacity="0.7"
+
+                                   VerticalAlignment="Center"
+
+                                   Text="FHIR Query Builder" />
+
+                    </StackPanel>
 
                 </StackPanel>
 

@@ -30,4 +30,8 @@ public static class OperationOutcomeFactory
 
     public static OperationOutcome NotFound(string diagnostics)
         => Issue("error", "not-found", diagnostics, HttpStatusCode.NotFound);
+
+    /// <summary>供批次匯入成功等非錯誤情境使用（HTTP 200）。</summary>
+    public static OperationOutcome Information(string diagnostics)
+        => Issue("information", "informational", diagnostics, HttpStatusCode.OK);
 }

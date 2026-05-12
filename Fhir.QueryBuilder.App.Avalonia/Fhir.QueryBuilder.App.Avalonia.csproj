@@ -2,7 +2,11 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- 供 dotnet publish -r win-x64、IDE RID 選取時正確還原 RID 資產（NETSDK1047） -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <Nullable>enable</Nullable>
+    <!-- 與 Blazor 套件共用 favicon.ico，供安裝程式／解除安裝清單圖示及 Inno Setup 對齊 -->
+    <ApplicationIcon>..\Fhir.QueryBuilder.App.Blazor\wwwroot\favicon.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

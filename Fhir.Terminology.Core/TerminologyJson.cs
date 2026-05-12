@@ -30,6 +30,7 @@ public static class TerminologyJson
             ["CodeSystem"] = typeof(CodeSystem),
             ["ValueSet"] = typeof(ValueSet),
             ["ConceptMap"] = typeof(ConceptMap),
+            ["StructureDefinition"] = typeof(StructureDefinition),
             ["Bundle"] = typeof(Bundle),
             ["OperationOutcome"] = typeof(OperationOutcome),
             ["Parameters"] = typeof(Parameters),

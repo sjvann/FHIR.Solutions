@@ -1,85 +1,425 @@
 @page "/admin/bindings"
+@rendermode @(new InteractiveServerRenderMode())
+@using System.Text.Json
+@using Fhir.Terminology.Core
 @inject TerminologyOrchestrator Orchestrator
+@inject ITerminologyRepository Repository
+@inject NavigationManager Navigation
 
-<h2>FHIR Binding 登錄</h2>
-<p>對應 StructureDefinition／元素 path 與 ValueSet canonical（含強度）。亦可用 REST：<code>GET/POST/DELETE /fhir/admin/registry/bindings</code>。</p>
+<h2>FHIR Binding 查詢與登錄</h2>
 
-@if (_bundleJson is null)
+<p style="max-width:880px;line-height:1.65;">
+    FHIR 在 <strong>StructureDefinition</strong>（通常為 <code>snapshot.element</code>）宣告哪些元素須遵守哪個 <strong>ValueSet</strong>（binding strength）。
+    本平台之<strong>驗證用 Binding 登錄</strong>仍為 REST <code>GET/POST/DELETE /fhir/admin/registry/bindings</code>，建議改由下方流程：
+    先<strong>匯入</strong> StructureDefinition，於此頁<strong>選取資源 → 檢視綁定欄位 → 追溯 ValueSet</strong>，必要時再<strong>同步至登錄</strong>。
+</p>
+<p style="max-width:880px;font-size:0.95rem;">
+    HL7 對術語綁定與使用情境：<a href="https://www.hl7.org/fhir/terminologies.html" target="_blank" rel="noopener noreferrer">FHIR Terminologies</a>。
+</p>
+
+@if (_loadError is not null)
+{
+    <p style="padding:12px;background:#ffebee;border:1px solid #ef9a9a;border-radius:6px;max-width:720px;color:#b71c1c;">@_loadError</p>
+}
+else if (_sdRows is null || _registryRows is null)
 {
     <p>載入中…</p>
 }
 else
 {
-    <pre style="background:#f6f6f6;padding:8px;overflow:auto;max-height:320px;">@_bundleJson</pre>
-}
+    <section style="margin:18px 0;padding:14px 16px;border:1px solid #ccc;border-radius:8px;background:#fafafa;max-width:920px;">
+        <h3 style="margin:0 0 12px;font-size:1.05rem;">選取 StructureDefinition</h3>
+        <p style="margin:0 0 10px;font-size:0.92rem;color:#444;">
+            請先於 <a href="/admin/import"><strong>匯入資源</strong></a> 貼上／上傳含 <code>id</code> 的 StructureDefinition（HL7 <code>profiles-resources.json</code> 等 Bundle 可分批匯入）。
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <div style="flex:1;min-width:220px;max-width:420px;">
+                <label for="sdq" style="display:block;font-weight:600;margin-bottom:4px;">搜尋（Id／Url／Name／Title）</label>
+                <input id="sdq" type="search" style="width:100%;padding:6px 10px;box-sizing:border-box;" placeholder="例如 Patient、StructureDefinition/Patient" @bind="_sdSearch" @bind:event="oninput" @onkeydown="OnSdSearchKeyDown" />
+            </div>
+            <button type="button" style="padding:6px 14px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;" @onclick="ClearSdSearchAsync">清除</button>
+        </div>
+        <p style="margin:10px 0 0;font-size:0.9rem;color:#555;">
+            資料庫內 StructureDefinition：<strong>@_filteredSd.Count</strong> 筆。
+        </p>
+        @if (_filteredSd.Count == 0)
+        {
+            <p style="margin-top:12px;color:#666;">尚無符合條件之 StructureDefinition，或尚未匯入任何 SD。</p>
+        }
+        else
+        {
+            <div style="margin-top:12px;">
+                <label for="sdpick" style="display:block;font-weight:600;margin-bottom:6px;">資源</label>
+                <select id="sdpick" style="padding:8px 10px;min-width:100%;max-width:880px;" @bind="_selectedSdKey" @bind:after="OnSdSelectionChangedAsync">
+                    @foreach (var r in _filteredSd)
+                    {
+                        <option value="@SdKey(r)">@SdLabel(r)</option>
+                    }
+                </select>
+            </div>
+        }
+    </section>
 
-<h3>新增綁定</h3>
-<EditForm Model="_model" OnValidSubmit="AddAsync">
-    <div>
-        <label>StructureDefinition URL（選填）</label>
-        <InputText class="form-control" @bind-Value="_model.StructureDefinitionUrl" />
-    </div>
-    <div>
-        <label>元素 path（選填）</label>
-        <InputText class="form-control" @bind-Value="_model.ElementPath" />
-    </div>
-    <div>
-        <label>ValueSet canonical（必填）</label>
-        <InputText class="form-control" @bind-Value="_model.ValueSetCanonical" />
-    </div>
-    <div>
-        <label>強度 strength（必填）</label>
-        <InputText class="form-control" @bind-Value="_model.Strength" placeholder="required / extensible / preferred / example" />
-    </div>
-    <button type="submit" class="btn btn-primary" disabled="@_busy">新增</button>
-</EditForm>
-@if (!string.IsNullOrEmpty(_message))
-{
-    <p style="color:coral;">@_message</p>
+    @if (_selectedRow is not null)
+    {
+        <section style="margin:18px 0;padding:14px 16px;border:1px solid #b8d4e8;border-radius:8px;background:#f7fbff;max-width:960px;">
+            <h3 style="margin:0 0 8px;font-size:1.05rem;">Profile canonical（<code>StructureDefinition.url</code>）</h3>
+            @if (string.IsNullOrEmpty(_profileUrl))
+            {
+                <p style="margin:0;color:#b71c1c;">此資源缺少 <code>url</code>，無法與驗證用登錄或 ValueSet/$validate-code 之 profile 參數對應。</p>
+            }
+            else
+            {
+                <p style="margin:0;word-break:break-all;"><code>@_profileUrl</code></p>
+            }
+            <p style="margin:10px 0 0;font-size:0.92rem;">
+                <a href="@RestSdJsonHref(_selectedRow)" target="_blank" rel="noopener noreferrer">REST GET JSON</a>
+                · <a href="@AdminSdViewHref(_selectedRow)">本站 VIEW</a>
+            </p>
+        </section>
+
+        <section style="margin:18px 0;max-width:960px;">
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:10px;">
+                <h3 style="margin:0;font-size:1.05rem;">元素綁定（來自 SD）</h3>
+                <button type="button" style="padding:8px 16px;border:1px solid #198754;background:#198754;color:#fff;border-radius:4px;cursor:pointer;font-weight:600;" disabled="@(_syncBusy || string.IsNullOrEmpty(_profileUrl))" @onclick="SyncRegistryAsync">
+                    同步至驗證用 Binding 登錄
+                </button>
+                <span style="font-size:0.88rem;color:#555;">會刪除同 profile URL 之舊登錄列後寫入主 <code>valueSet</code>（不含 additional）。</span>
+            </div>
+            @if (!string.IsNullOrEmpty(_syncMessage))
+            {
+                <p style="margin:0 0 10px;font-size:0.92rem;color:@(_syncOk ? "#1b5e20" : "#b71c1c");">@_syncMessage</p>
+            }
+            @if (_discovered.Count == 0)
+            {
+                <div style="padding:12px 14px;background:#fff8e6;border:1px solid #e6d9a8;border-radius:8px;max-width:880px;color:#333;font-size:0.95rem;line-height:1.65;">
+                    <strong>目前無法列出綁定。</strong>可能原因：此 StructureDefinition 的 JSON 內未含 <code>snapshot.element.binding</code>／<code>differential</code>，
+                    或資料為<strong>舊版匯入</strong>（先前存入資料庫時曾因型別往返遺失 binding）。
+                    請至 <a href="/admin/import"><strong>匯入資源</strong></a> <strong>重新匯入</strong>該筆 SD（例如 HL7 <code>profiles-resources.json</code> 內之 Patient），再回此頁選取。
+                </div>
+            }
+            else
+            {
+                <div style="overflow-x:auto;">
+                    <table style="border-collapse:collapse;width:100%;font-size:0.9rem;">
+                        <thead>
+                        <tr style="background:#eee;">
+                            <th style="padding:8px;border:1px solid #ccc;text-align:left;">欄位（元素 path）</th>
+                            <th style="padding:8px;border:1px solid #ccc;text-align:left;">綁定強度</th>
+                            <th style="padding:8px;border:1px solid #ccc;text-align:left;">綁定 ValueSet（canonical）</th>
+                            <th style="padding:8px;border:1px solid #ccc;text-align:left;">槽</th>
+                            <th style="padding:8px;border:1px solid #ccc;text-align:left;">可能碼值</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var d in _discovered)
+                        {
+                            <tr>
+                                <td style="padding:8px;border:1px solid #ccc;vertical-align:top;"><code>@d.ElementPath</code></td>
+                                <td style="padding:8px;border:1px solid #ccc;">@d.Strength</td>
+                                <td style="padding:8px;border:1px solid #ccc;word-break:break-all;"><code>@d.ValueSetCanonical</code></td>
+                                <td style="padding:8px;border:1px solid #ccc;">@(d.Slot == StructureDefinitionBindingSlot.Primary ? "主" : "附加")</td>
+                                <td style="padding:8px;border:1px solid #ccc;font-size:0.85rem;vertical-align:top;">
+                                    <a href="@ValueSetExpandHref(d.ValueSetCanonical)" target="_blank" rel="noopener noreferrer"><strong>$expand</strong>（列出碼值）</a>
+                                    @if (_localVs.TryGetValue(d.ValueSetCanonical, out var vsRow) && vsRow is not null)
+                                    {
+                                        <span> · </span><a href="@AdminVsViewHref(vsRow)">本站 ValueSet</a>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <p style="margin:10px 0 0;font-size:0.88rem;color:#555;max-width:880px;">
+                    <strong>$expand</strong> 會呼叫本站 <code>GET /fhir/ValueSet/$expand?url=…</code>；若已匯入對應 ValueSet 會在本機展開，否則可能委派上游或需另匯入詞表。
+                </p>
+            }
+        </section>
+
+        @if (!string.IsNullOrEmpty(_profileUrl))
+        {
+            <section style="margin:18px 0;max-width:960px;">
+                <h3 style="margin:0 0 10px;font-size:1.05rem;">目前登錄中此 Profile 的綁定（驗證用）</h3>
+                @if (_registryForProfile.Count == 0)
+                {
+                    <p style="color:#666;font-size:0.95rem;">尚無列舉；請按上方「同步」或 POST <code>/fhir/admin/registry/bindings</code>。</p>
+                }
+                else
+                {
+                    <div style="overflow-x:auto;">
+                        <table style="border-collapse:collapse;width:100%;font-size:0.9rem;">
+                            <thead>
+                            <tr style="background:#eee;">
+                                <th style="padding:8px;border:1px solid #ccc;text-align:left;">欄位（path）</th>
+                                <th style="padding:8px;border:1px solid #ccc;text-align:left;">ValueSet</th>
+                                <th style="padding:8px;border:1px solid #ccc;text-align:left;">strength</th>
+                                <th style="padding:8px;border:1px solid #ccc;text-align:left;">可能碼值</th>
+                                <th style="padding:8px;border:1px solid #ccc;text-align:left;width:72px;">刪除</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var b in _registryForProfile)
+                            {
+                                <tr>
+                                    <td style="padding:8px;border:1px solid #ccc;"><code>@(b.ElementPath ?? "—")</code></td>
+                                    <td style="padding:8px;border:1px solid #ccc;word-break:break-all;"><code>@b.ValueSetCanonical</code></td>
+                                    <td style="padding:8px;border:1px solid #ccc;">@b.Strength</td>
+                                    <td style="padding:8px;border:1px solid #ccc;font-size:0.85rem;">
+                                        <a href="@ValueSetExpandHref(b.ValueSetCanonical)" target="_blank" rel="noopener noreferrer">$expand</a>
+                                    </td>
+                                    <td style="padding:8px;border:1px solid #ccc;">
+                                        <button type="button" style="padding:4px 8px;font-size:0.85rem;cursor:pointer;" disabled="@_syncBusy" @onclick="() => DeleteRegistryRowAsync(b.Id)">刪除</button>
+                                    </td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </section>
+        }
+    }
+
+    <details style="margin-top:20px;padding:12px;border:1px solid #ccc;border-radius:8px;background:#fff;max-width:920px;">
+        <summary style="cursor:pointer;font-weight:600;">完整 Binding 登錄 JSON（Bundle）</summary>
+        <pre style="margin:12px 0 0;padding:12px;background:#f6f6f6;border-radius:6px;overflow:auto;max-height:280px;font-size:12px;">@(_bundleJson ?? "")</pre>
+    </details>
 }
 
 @code {
+    private List<StoredResourceRow>? _sdRows;
+    private IReadOnlyList<BindingRegistryRow>? _registryRows;
+    private string? _loadError;
+    private string _sdSearch = "";
+    private List<StoredResourceRow> _filteredSd = [];
+    private string _selectedSdKey = "";
+    private StoredResourceRow? _selectedRow;
+    private string? _profileUrl;
+    private List<StructureDefinitionDiscoveredBinding> _discovered = [];
+    private Dictionary<string, StoredResourceRow?> _localVs = new(StringComparer.Ordinal);
+    private List<BindingRegistryRow> _registryForProfile = [];
     private string? _bundleJson;
-    private string? _message;
-    private bool _busy;
 
-    private BindingFormModel _model = new();
+    private bool _syncBusy;
+    private bool _syncOk;
+    private string? _syncMessage;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var sd = await Repository.SearchAsync("StructureDefinition", new TerminologySearchParameters());
+            _sdRows = sd.ToList();
+            _registryRows = await Repository.ListBindingsAsync();
+            await RebuildSdFilterAsync(selectFirst: true);
+            await ReloadBundleJsonAsync();
+        }
+        catch (Exception ex)
+        {
+            _loadError = "載入失敗：" + ex.Message;
+        }
+    }
 
-    private async Task ReloadAsync()
+    private async Task OnSdSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await RebuildSdFilterAsync(selectFirst: false);
+    }
+
+    private async Task ClearSdSearchAsync()
+    {
+        _sdSearch = "";
+        await RebuildSdFilterAsync(selectFirst: true);
+    }
+
+    private async Task RebuildSdFilterAsync(bool selectFirst)
+    {
+        if (_sdRows is null)
+            return;
+
+        var term = _sdSearch.Trim();
+        IEnumerable<StoredResourceRow> q = _sdRows;
+        if (term.Length > 0)
+        {
+            q = q.Where(r =>
+                ContainsIgnoreCase(r.LogicalId, term) ||
+                ContainsIgnoreCase(r.Url, term) ||
+                ContainsIgnoreCase(r.Name, term) ||
+                ContainsIgnoreCase(r.Title, term));
+        }
+
+        _filteredSd = q
+            .OrderBy(r => r.LogicalId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectFirst && _filteredSd.Count > 0)
+            _selectedSdKey = SdKey(_filteredSd[0]);
+        else if (_filteredSd.All(r => SdKey(r) != _selectedSdKey))
+            _selectedSdKey = _filteredSd.Count > 0 ? SdKey(_filteredSd[0]) : "";
+
+        await OnSdSelectionChangedAsync();
+    }
+
+    private async Task OnSdSelectionChangedAsync()
+    {
+        _syncMessage = null;
+        _selectedRow = null;
+        _profileUrl = null;
+        _discovered = [];
+        _localVs = new Dictionary<string, StoredResourceRow?>(StringComparer.Ordinal);
+        _registryForProfile = [];
+
+        var row = _filteredSd.FirstOrDefault(r => SdKey(r) == _selectedSdKey);
+        if (row is null)
+            return;
+
+        _selectedRow = row;
+        _profileUrl = StructureDefinitionBindingDiscoverer.TryGetCanonicalUrl(row.RawJson);
+        _discovered = StructureDefinitionBindingDiscoverer.ListAllBindings(row.RawJson).ToList();
+
+        foreach (var canonical in _discovered.Select(d => d.ValueSetCanonical).Distinct(StringComparer.Ordinal))
+        {
+            var vs = await FindLocalValueSetRowAsync(canonical, row.FhirSpecVersion);
+            _localVs[canonical] = vs;
+        }
+
+        if (_registryRows is not null && !string.IsNullOrEmpty(_profileUrl))
+        {
+            _registryForProfile = _registryRows
+                .Where(b => string.Equals(b.StructureDefinitionUrl, _profileUrl, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(b => b.ElementPath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    private async Task SyncRegistryAsync()
+    {
+        if (_selectedRow is null || string.IsNullOrEmpty(_profileUrl))
+            return;
+
+        _syncBusy = true;
+        _syncMessage = null;
+        try
+        {
+            var r = await Orchestrator.SyncBindingRegistryFromStoredStructureDefinitionAsync(_selectedRow.LogicalId, _selectedRow.FhirSpecVersion, default);
+            _syncOk = r.HttpStatus == 200;
+            _syncMessage = _syncOk
+                ? TryReadOutcomeDiagnostics(r.JsonBody) ?? "同步完成。"
+                : TryReadOutcomeDiagnostics(r.JsonBody) ?? $"同步失敗（HTTP {r.HttpStatus}）。";
+
+            _registryRows = await Repository.ListBindingsAsync();
+            await ReloadBundleJsonAsync();
+            await OnSdSelectionChangedAsync();
+        }
+        catch (Exception ex)
+        {
+            _syncOk = false;
+            _syncMessage = ex.Message;
+        }
+        finally
+        {
+            _syncBusy = false;
+        }
+    }
+
+    private async Task DeleteRegistryRowAsync(Guid id)
+    {
+        _syncBusy = true;
+        try
+        {
+            var r = await Orchestrator.DeleteBindingRowAsync(id, default);
+            _syncOk = r.HttpStatus is >= 200 and < 300;
+            _syncMessage = _syncOk ? null : TryReadOutcomeDiagnostics(r.JsonBody) ?? $"刪除失敗（HTTP {r.HttpStatus}）。";
+
+            _registryRows = await Repository.ListBindingsAsync();
+            await ReloadBundleJsonAsync();
+            await OnSdSelectionChangedAsync();
+        }
+        catch (Exception ex)
+        {
+            _syncOk = false;
+            _syncMessage = ex.Message;
+        }
+        finally
+        {
+            _syncBusy = false;
+        }
+    }
+
+    private async Task ReloadBundleJsonAsync()
     {
         var r = await Orchestrator.ListBindingsAsync(default);
         _bundleJson = r.JsonBody;
     }
 
-    private async Task AddAsync()
+    private string ValueSetExpandHref(string valueSetCanonical)
     {
-        _busy = true;
-        _message = null;
+        if (_selectedRow is null)
+            return "#";
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        var vsUrl = Uri.EscapeDataString(StructureDefinitionBindingDiscoverer.StripPipeVersionSuffix(valueSetCanonical.Trim()));
+        var fv = Uri.EscapeDataString(_selectedRow.FhirSpecVersion);
+        return $"{origin}/fhir/ValueSet/$expand?url={vsUrl}&fhirSpecVersion={fv}";
+    }
+
+    private async Task<StoredResourceRow?> FindLocalValueSetRowAsync(string canonical, string fhirSpecVersion)
+    {
+        var trimmed = canonical.Trim();
+        var exact = await Repository.FindByUrlAsync("ValueSet", trimmed, null, fhirSpecVersion, default);
+        if (exact is not null)
+            return exact;
+
+        var stripped = StructureDefinitionBindingDiscoverer.StripPipeVersionSuffix(trimmed);
+        return string.Equals(stripped, trimmed, StringComparison.Ordinal)
+            ? null
+            : await Repository.FindByUrlAsync("ValueSet", stripped, null, fhirSpecVersion, default);
+    }
+
+    private static string SdKey(StoredResourceRow r) => $"{r.LogicalId}\u001f{r.FhirSpecVersion}";
+
+    private static string SdLabel(StoredResourceRow r)
+    {
+        var url = string.IsNullOrEmpty(r.Url) ? "—" : r.Url;
+        return $"{r.LogicalId} · {r.FhirSpecVersion} · {url}";
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string needle)
+        => value is not null && value.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    private string RestSdJsonHref(StoredResourceRow r)
+    {
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        return $"{origin}/fhir/StructureDefinition/{Uri.EscapeDataString(r.LogicalId)}?fhirSpecVersion={Uri.EscapeDataString(r.FhirSpecVersion)}";
+    }
+
+    private string AdminSdViewHref(StoredResourceRow r)
+    {
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        return $"{origin}/admin/resources/view/StructureDefinition/{Uri.EscapeDataString(r.LogicalId)}?fhirSpecVersion={Uri.EscapeDataString(r.FhirSpecVersion)}";
+    }
+
+    private string AdminVsViewHref(StoredResourceRow vs)
+    {
+        var origin = Navigation.BaseUri.TrimEnd('/');
+        return $"{origin}/admin/resources/view/ValueSet/{Uri.EscapeDataString(vs.LogicalId)}?fhirSpecVersion={Uri.EscapeDataString(vs.FhirSpecVersion)}";
+    }
+
+    private static string? TryReadOutcomeDiagnostics(string json)
+    {
         try
         {
-            var row = new BindingRegistryRow(Guid.Empty, _model.StructureDefinitionUrl, _model.ElementPath, _model.ValueSetCanonical.Trim(), _model.Strength.Trim());
-            await Orchestrator.AddBindingRowAsync(row, default);
-            _model = new BindingFormModel();
-            await ReloadAsync();
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("issue", out var issues) || issues.ValueKind != JsonValueKind.Array || issues.GetArrayLength() == 0)
+                return null;
+            var first = issues[0];
+            if (first.TryGetProperty("diagnostics", out var diag) && diag.ValueKind == JsonValueKind.String)
+                return diag.GetString();
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            _message = ex.Message;
         }
-        finally
-        {
-            _busy = false;
-        }
-    }
 
-    private sealed class BindingFormModel
-    {
-        public string? StructureDefinitionUrl { get; set; }
-        public string? ElementPath { get; set; }
-        public string ValueSetCanonical { get; set; } = "";
-        public string Strength { get; set; } = "required";
+        return null;
     }
 }
-

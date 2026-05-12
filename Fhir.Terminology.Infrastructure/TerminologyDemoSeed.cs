@@ -32,6 +32,7 @@ public static class TerminologyDemoSeed
     public static async Task EnsureDemoResourcesAsync(
         TerminologyDbContext db,
         ITerminologyRepository repository,
+        string seedFhirSpecVersion,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
@@ -39,7 +40,7 @@ public static class TerminologyDemoSeed
             return;
 
         foreach (var json in DemoResourcesInOrder)
-            await repository.CreateAsync(json, cancellationToken);
+            await repository.CreateAsync(json, seedFhirSpecVersion, cancellationToken);
 
         logger.LogInformation("Seeded {Count} demo terminology resources (database was empty).", DemoResourcesInOrder.Length);
     }

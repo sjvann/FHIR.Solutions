@@ -1,6 +1,7 @@
 ﻿using Fhir.QueryBuilder.Common;
 using Fhir.QueryBuilder.Services.Interfaces;
-using Microsoft.Extensions.Logging;
+using Fhir.VersionManager;
+using Fhir.VersionManager.Capability;
 
 namespace Fhir.QueryBuilder.Services.Interfaces
 {
@@ -9,36 +10,13 @@ namespace Fhir.QueryBuilder.Services.Interfaces
     /// </summary>
     public interface ICapabilityAnalyzer
     {
-        /// <summary>
-        /// 分析能力聲明
-        /// </summary>
-        /// <param name="capabilityStatement">能力聲明</param>
-        /// <returns>分析結果</returns>
-        Task<CapabilityAnalysisResult> AnalyzeCapabilityAsync(global::Fhir.Resources.R5.CapabilityStatement capabilityStatement);
+        Task<CapabilityAnalysisResult> AnalyzeCapabilityAsync(ICapabilityModel capability);
 
-        /// <summary>
-        /// 比較兩個能力聲明
-        /// </summary>
-        /// <param name="baseline">基準能力聲明</param>
-        /// <param name="target">目標能力聲明</param>
-        /// <returns>比較結果</returns>
-        Task<CapabilityComparisonResult> CompareCapabilitiesAsync(global::Fhir.Resources.R5.CapabilityStatement baseline, global::Fhir.Resources.R5.CapabilityStatement target);
+        Task<CapabilityComparisonResult> CompareCapabilitiesAsync(ICapabilityModel baseline, ICapabilityModel target);
 
-        /// <summary>
-        /// 檢查功能支援
-        /// </summary>
-        /// <param name="capabilityStatement">能力聲明</param>
-        /// <param name="feature">功能名稱</param>
-        /// <returns>是否支援</returns>
-        Task<bool> CheckFeatureSupportAsync(global::Fhir.Resources.R5.CapabilityStatement capabilityStatement, string feature);
+        Task<bool> CheckFeatureSupportAsync(ICapabilityModel capability, string feature);
 
-        /// <summary>
-        /// 取得建議的查詢策略
-        /// </summary>
-        /// <param name="capabilityStatement">能力聲明</param>
-        /// <param name="resourceType">資源類型</param>
-        /// <returns>查詢策略建議</returns>
-        Task<QueryStrategyRecommendation> GetQueryStrategyAsync(global::Fhir.Resources.R5.CapabilityStatement capabilityStatement, string resourceType);
+        Task<QueryStrategyRecommendation> GetQueryStrategyAsync(ICapabilityModel capability, string resourceType);
     }
 
     /// <summary>

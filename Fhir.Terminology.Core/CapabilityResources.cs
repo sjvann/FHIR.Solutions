@@ -33,6 +33,14 @@ internal static class CapabilityResources
             Operation = Ops(["$translate"]),
         };
 
+    public static CapabilityStatement.RestComponent.RestResourceComponent StructureDefinition() =>
+        new()
+        {
+            Type = new FhirCode("StructureDefinition"),
+            Interaction = Interactions(["read", "search-type", "create", "update", "delete"]),
+            SearchParam = StandardSearchParams(),
+        };
+
     private static List<CapabilityStatement.RestComponent.RestResourceComponent.RestResourceInteractionComponent> Interactions(string[] codes)
     {
         var list = new List<CapabilityStatement.RestComponent.RestResourceComponent.RestResourceInteractionComponent>();

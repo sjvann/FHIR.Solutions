@@ -25,6 +25,8 @@
 |------|------|
 | `Fhir.TypeFramework` | FHIR 強型別基底與資料型別；發佈 NuGet **`Fhir.TypeFramework`**。 |
 | `Fhir.TypeFramework.Tests` | 單元／BDD 測試；**不**產生套件。 |
+| `Fhir.VersionManager` | FHIR 線別偵測、metadata 解析與 `ICapabilityModel` 窄化抽象；依賴 `Fhir.TypeFramework` 與各線別 `Fhir.Resources.*`。 |
+| `Fhir.VersionManager.Tests` | `Fhir.VersionManager` 單元測試；**不**產生套件。 |
 | `Fhir.ResourceCreator` | 由 FHIR 套件定義產生資源類別之工具；產出物應引用 **`Fhir.TypeFramework`**（單一套件策略，見 `.cursor/rules/fhir-sdk-architecture.mdc`）。詳見 **`Fhir.Docs/`**。 |
 
 ## Cursor 規則檔

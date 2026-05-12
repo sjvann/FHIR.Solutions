@@ -28,6 +28,22 @@
                     </select>
                 </div>
             </div>
+            <div class="row g-2 align-items-center mb-2 small">
+                <div class="col-auto text-muted">FHIR 宣告</div>
+                <div class="col-auto">
+                    <select class="form-select form-select-sm" style="width: 5.5rem"
+                            @bind="Vm.SelectedFhirVersionShort" @bind:event="onchange">
+                        @foreach (var v in Vm.FhirVersionChoices)
+                        {
+                            <option value="@v">@v</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-auto text-muted">偵測</div>
+                <div class="col-auto fw-semibold">@Vm.DetectedFhirVersionDisplay</div>
+                <div class="col-auto text-muted">作用</div>
+                <div class="col-auto fw-semibold">@Vm.ActiveFhirVersionDisplay</div>
+            </div>
             <div class="mb-2">
                 <label class="form-label small text-muted mb-0">Bearer access token（選填）</label>
                 <input type="password" class="form-control form-control-sm" autocomplete="off"
@@ -125,7 +141,7 @@
                             <div class="col-md-6 border-end min-w-0">
                                 <div class="small fw-semibold mb-2">Capability search params</div>
                                 <select class="form-select form-select-sm" size="14"
-                                        style="min-height:240px"
+                                        style="min-height:240px;line-height:1.2;padding-top:0.15rem;padding-bottom:0.15rem"
                                         @bind="SelectedCapabilitySearchParamName"
                                         @bind:after="OnCapabilitySearchParamBindAfterAsync">
                                     <option value="">—</option>
@@ -293,8 +309,9 @@
     {
         Vm.SetUiThreadPost(a =>
         {
-            _ = InvokeAsync(() =>
+            InvokeAsync(async () =>
             {
+                await Task.Yield();
                 a();
                 StateHasChanged();
             });

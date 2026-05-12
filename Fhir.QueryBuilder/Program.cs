@@ -7,6 +7,7 @@ using Fhir.QueryBuilder.QueryBuilders.FluentApi;
 using Fhir.QueryBuilder.Services;
 using Fhir.QueryBuilder.Services.Interfaces;
 using Fhir.QueryBuilder.ViewModels;
+using Fhir.VersionManager;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -56,7 +57,13 @@ namespace Fhir.QueryBuilder
                     services.Configure<TokenServerOptions>(
                         context.Configuration.GetSection(QueryBuilderAppSettings.SectionName).GetSection("Smart"));
 
-                    services.AddFhirQueryBuilderR5();
+                    var qbSection = context.Configuration.GetSection(QueryBuilderAppSettings.SectionName);
+                    var defaultVer = FhirVersionParser.ParseFromShortName(qbSection["DefaultFhirVersion"]);
+                    if (defaultVer == FhirVersion.Unknown)
+                        defaultVer = FhirVersion.R5;
+                    services.AddFhirQueryBuilderMultiVersion(
+                        new[] { FhirVersion.R4, FhirVersion.R4B, FhirVersion.R5 },
+                        defaultVer);
 
                     services.AddSingleton<Func<IFhirQueryBuilder>>(sp =>
                         () => sp.GetRequiredService<IFhirQueryBuilder>());

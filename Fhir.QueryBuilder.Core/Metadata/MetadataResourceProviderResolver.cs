@@ -1,4 +1,4 @@
-﻿using Fhir.QueryBuilder.Common;
+﻿using Fhir.VersionManager;
 
 namespace Fhir.QueryBuilder.Metadata;
 
@@ -10,17 +10,23 @@ public interface IMetadataResourceProviderResolver
 
 public sealed class MetadataResourceProviderResolver : IMetadataResourceProviderResolver
 {
-    private readonly Dictionary<FhirVersion, IMetadataResourceProvider> _providers;
+    private readonly IReadOnlyDictionary<FhirVersion, IMetadataResourceProvider> _providers;
 
-    public MetadataResourceProviderResolver(IEnumerable<IMetadataResourceProvider> providers)
+    /// <summary>以單一實際提供者對應多個支援版本（連線後 metadata 依 <see cref="ICapabilityContext"/>）。</summary>
+    public MetadataResourceProviderResolver(IMetadataResourceProvider sharedProvider, IEnumerable<FhirVersion> supportedVersions)
     {
-        _providers = providers.ToDictionary(p => p.SupportedVersion, p => p);
+        var keys = supportedVersions.Distinct().ToList();
+        if (keys.Count == 0)
+            keys = new List<FhirVersion> { FhirVersion.R5 };
+        _providers = keys.ToDictionary(v => v, _ => sharedProvider);
     }
 
     public IMetadataResourceProvider GetProvider(FhirVersion version)
     {
-        return _providers.TryGetValue(version, out var provider)
-            ? provider
-            : throw new NotSupportedException($"FHIR version {version} is not supported by metadata providers.");
+        if (_providers.TryGetValue(version, out var provider))
+            return provider;
+        if (version == FhirVersion.Unknown && _providers.Count > 0)
+            return _providers.Values.First();
+        throw new NotSupportedException($"FHIR version {version} is not supported by metadata providers.");
     }
 }

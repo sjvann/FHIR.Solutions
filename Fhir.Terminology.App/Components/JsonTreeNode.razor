@@ -1,0 +1,123 @@
+@using System.Text.Json
+
+@if (Element.ValueKind == JsonValueKind.Object)
+{
+    var props = Element.EnumerateObject().ToList();
+    @if (props.Count == 0)
+    {
+        <span class="jtn-punct">{ }</span>
+    }
+    else
+    {
+        <span class="jtn-line" style="padding-left:@Px(Depth)">
+            <button type="button" class="jtn-toggle" @onclick="Toggle" aria-expanded="@_expanded">@Triangle</button>
+            <span class="jtn-punct">{</span>
+            @if (!_expanded)
+            {
+                <span class="jtn-meta"> … @props.Count keys </span>
+                <span class="jtn-punct">}</span>
+            }
+        </span>
+        @if (_expanded)
+        {
+            @foreach (var p in props)
+            {
+                <div class="jtn-line" style="padding-left:@Px(Depth + 1)">
+                    <span class="jtn-key">"@p.Name"</span><span class="jtn-punct">: </span>
+                    @if (IsExpandable(p.Value))
+                    {
+                        <JsonTreeNode Element="@p.Value" Depth="@(Depth + 1)" />
+                    }
+                    else
+                    {
+                        <span class="@PrimClass(p.Value)">@Raw(p.Value)</span>
+                    }
+                </div>
+            }
+            <div class="jtn-line" style="padding-left:@Px(Depth)"><span class="jtn-punct">}</span></div>
+        }
+    }
+}
+else if (Element.ValueKind == JsonValueKind.Array)
+{
+    var items = Element.EnumerateArray().ToList();
+    @if (items.Count == 0)
+    {
+        <span class="jtn-punct">[]</span>
+    }
+    else
+    {
+        <span class="jtn-line" style="padding-left:@Px(Depth)">
+            <button type="button" class="jtn-toggle" @onclick="Toggle" aria-expanded="@_expanded">@Triangle</button>
+            <span class="jtn-punct">[</span>
+            @if (!_expanded)
+            {
+                <span class="jtn-meta"> … @items.Count items </span>
+                <span class="jtn-punct">]</span>
+            }
+        </span>
+        @if (_expanded)
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                <div class="jtn-line" style="padding-left:@Px(Depth + 1)">
+                    <span class="jtn-idx">[@i]</span><span class="jtn-punct"> </span>
+                    @if (IsExpandable(item))
+                    {
+                        <JsonTreeNode Element="@item" Depth="@(Depth + 1)" />
+                    }
+                    else
+                    {
+                        <span class="@PrimClass(item)">@Raw(item)</span>
+                    }
+                </div>
+            }
+            <div class="jtn-line" style="padding-left:@Px(Depth)"><span class="jtn-punct">]</span></div>
+        }
+    }
+}
+else
+{
+    <span class="@PrimClass(Element)">@Raw(Element)</span>
+}
+
+@code {
+    [Parameter]
+    public JsonElement Element { get; set; }
+
+    [Parameter]
+    public int Depth { get; set; }
+
+    private bool _expanded;
+    private int _initDepth = int.MinValue;
+
+    protected override void OnParametersSet()
+    {
+        if (_initDepth != Depth)
+        {
+            _initDepth = Depth;
+            _expanded = Depth < 2;
+        }
+    }
+
+    private void Toggle() => _expanded = !_expanded;
+
+    private string Triangle => _expanded ? "▼" : "▶";
+
+    private static string Px(int depth) => $"{depth * 14}px";
+
+    private static bool IsExpandable(JsonElement e) =>
+        e.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+
+    private static string Raw(JsonElement e) => e.GetRawText();
+
+    private static string PrimClass(JsonElement e) => e.ValueKind switch
+    {
+        JsonValueKind.String => "jtn-str",
+        JsonValueKind.Number => "jtn-num",
+        JsonValueKind.True or JsonValueKind.False => "jtn-bool",
+        JsonValueKind.Null => "jtn-null",
+        _ => "jtn-punct",
+    };
+}

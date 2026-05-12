@@ -1,0 +1,403 @@
+@page "/admin/query"
+@rendermode @(new InteractiveServerRenderMode())
+@using System.Text.Json
+@using System.Net
+@inject TerminologyOrchestrator Orchestrator
+@inject NavigationManager Navigation
+
+<PageTitle>術語查詢</PageTitle>
+
+<h2>術語查詢（圖形介面）</h2>
+
+<p style="max-width:900px;line-height:1.65;color:#333;">
+    在此以表單執行常見 Terminology 操作，結果與 REST <code>/fhir/…</code> 相同（本機優先、必要時轉發上游）。
+    <strong>不需開啟 Scalar／手動組 URL</strong>；Scalar 仍適合給程式整合或查完整 OpenAPI。
+</p>
+
+<section style="margin:14px 0;padding:12px 14px;border:1px solid #ddd;border-radius:8px;background:#fafafa;max-width:920px;">
+    <label for="fv" style="display:block;font-weight:600;margin-bottom:6px;">FHIR 規格版本（選填）</label>
+    <input id="fv" type="text" style="width:100%;max-width:280px;padding:6px 10px;box-sizing:border-box;" placeholder="留空用伺服器預設，例如 R5" @bind="_fhirSpecVersion" />
+    <p style="margin:8px 0 0;font-size:0.88rem;color:#555;">對應 REST 查詢參數 <code>fhirSpecVersion</code>；僅在資料庫區分多版本資源時需要。</p>
+</section>
+
+<div style="display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 12px;max-width:960px;">
+    @foreach (var t in Tabs)
+    {
+        var active = _tab == t.Id;
+        <button type="button"
+                style="@TabStyle(active)"
+                @onclick="() => _tab = t.Id">
+            @t.Label
+        </button>
+    }
+</div>
+
+<div style="max-width:960px;">
+    @switch (_tab)
+    {
+        case "expand":
+            <section class="qb">
+                <h3>ValueSet <code>$expand</code></h3>
+                <p class="hint">請擇一填寫：<strong>ValueSet id</strong>（本站 logical id）或 <strong>canonical url</strong>。</p>
+                <div class="row"><label>ValueSet id</label><input type="text" @bind="_vsId" placeholder="例如 administrative-gender" /></div>
+                <div class="row"><label>ValueSet url</label><input type="text" @bind="_vsUrl" placeholder="canonical，例如 http://hl7.org/fhir/ValueSet/administrative-gender" /></div>
+                <div class="row"><label>filter</label><input type="text" @bind="_vsFilter" placeholder="選填：篩選 display／code" /></div>
+                <div class="row"><label>offset</label><input type="text" @bind="_vsOffset" placeholder="選填：整數" /></div>
+                <div class="row"><label>count</label><input type="text" @bind="_vsCount" placeholder="選填：整數" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunExpandAsync">執行 $expand</button>
+            </section>
+            break;
+        case "lookup":
+            <section class="qb">
+                <h3>CodeSystem <code>$lookup</code></h3>
+                <p class="hint">請擇一：<strong>CodeSystem id</strong> 或 <strong>system</strong>（編碼系統 URI）。<strong>code</strong> 必填。</p>
+                <div class="row"><label>CodeSystem id</label><input type="text" @bind="_lkCsId" /></div>
+                <div class="row"><label>system</label><input type="text" @bind="_lkSystem" placeholder="與 id 二擇一" /></div>
+                <div class="row"><label>code</label><input type="text" @bind="_lkCode" /></div>
+                <div class="row"><label>version</label><input type="text" @bind="_lkVersion" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunLookupAsync">執行 $lookup</button>
+            </section>
+            break;
+        case "validate-vs":
+            <section class="qb">
+                <h3>ValueSet <code>$validate-code</code></h3>
+                <p class="hint">填寫 ValueSet（<strong>id</strong> 或 <strong>url</strong>）與 <strong>code</strong> + <strong>system</strong>。</p>
+                <div class="row"><label>ValueSet id</label><input type="text" @bind="_vvVsId" /></div>
+                <div class="row"><label>ValueSet url</label><input type="text" @bind="_vvUrl" /></div>
+                <div class="row"><label>code</label><input type="text" @bind="_vvCode" /></div>
+                <div class="row"><label>system</label><input type="text" @bind="_vvSystem" /></div>
+                <div class="row"><label>display</label><input type="text" @bind="_vvDisplay" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunValidateVsAsync">執行驗證</button>
+            </section>
+            break;
+        case "validate-cs":
+            <section class="qb">
+                <h3>CodeSystem <code>$validate-code</code></h3>
+                <p class="hint"><strong>code</strong> 必填；資源請用 <strong>CodeSystem id</strong> 或 <strong>url</strong>。</p>
+                <div class="row"><label>CodeSystem id</label><input type="text" @bind="_vcCsId" /></div>
+                <div class="row"><label>CodeSystem url</label><input type="text" @bind="_vcUrl" /></div>
+                <div class="row"><label>code</label><input type="text" @bind="_vcCode" /></div>
+                <div class="row"><label>system</label><input type="text" @bind="_vcSystem" placeholder="選填（轉發上游時）" /></div>
+                <div class="row"><label>display</label><input type="text" @bind="_vcDisplay" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunValidateCsAsync">執行驗證</button>
+            </section>
+            break;
+        case "validate-binding":
+            <section class="qb">
+                <h3>依 Binding 登錄驗證（<code>profile</code> + <code>path</code>）</h3>
+                <p class="hint">與 REST <code>ValueSet/$validate-code?profile=&amp;path=</code> 相同：先於 <a href="/admin/bindings">Bindings</a> 同步登錄。</p>
+                <div class="row"><label>profile（StructureDefinition.url）</label><input type="text" @bind="_bdProfile" /></div>
+                <div class="row"><label>path（元素路徑）</label><input type="text" @bind="_bdPath" placeholder="例如 Patient.gender" /></div>
+                <div class="row"><label>code</label><input type="text" @bind="_bdCode" /></div>
+                <div class="row"><label>system</label><input type="text" @bind="_bdSystem" /></div>
+                <div class="row"><label>display</label><input type="text" @bind="_bdDisplay" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunValidateBindingAsync">執行驗證</button>
+            </section>
+            break;
+        case "translate":
+            <section class="qb">
+                <h3>ConceptMap <code>$translate</code></h3>
+                <p class="hint"><strong>sourceCode</strong>、<strong>sourceSystem</strong> 必填；ConceptMap 以 <strong>id</strong> 或 <strong>url</strong> 指定（可皆空以轉發上游）。</p>
+                <div class="row"><label>ConceptMap id</label><input type="text" @bind="_trCmId" /></div>
+                <div class="row"><label>ConceptMap url</label><input type="text" @bind="_trUrl" /></div>
+                <div class="row"><label>source code</label><input type="text" @bind="_trSourceCode" /></div>
+                <div class="row"><label>source system</label><input type="text" @bind="_trSourceSystem" /></div>
+                <div class="row"><label>target system</label><input type="text" @bind="_trTargetSystem" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunTranslateAsync">執行 $translate</button>
+            </section>
+            break;
+        case "subsumes":
+            <section class="qb">
+                <h3>CodeSystem <code>$subsumes</code></h3>
+                <p class="hint"><strong>system</strong>、<strong>codeA</strong>、<strong>codeB</strong> 必填（階層詞表）。</p>
+                <div class="row"><label>CodeSystem id</label><input type="text" @bind="_subCsId" placeholder="選填：略過則用 system 找資源" /></div>
+                <div class="row"><label>system</label><input type="text" @bind="_subSystem" /></div>
+                <div class="row"><label>codeA</label><input type="text" @bind="_subCodeA" /></div>
+                <div class="row"><label>codeB</label><input type="text" @bind="_subCodeB" /></div>
+                <div class="row"><label>version</label><input type="text" @bind="_subVersion" placeholder="選填" /></div>
+                <button type="button" class="primary" disabled="@_busy" @onclick="RunSubsumesAsync">執行 $subsumes</button>
+            </section>
+            break;
+    }
+</div>
+
+<section style="margin-top:22px;padding:14px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;max-width:960px;">
+    <h3 style="margin:0 0 10px;font-size:1.05rem;">結果</h3>
+    @if (string.IsNullOrEmpty(_lastLabel))
+    {
+        <p style="margin:0;color:#666;">尚未執行查詢。</p>
+    }
+    else
+    {
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px;">
+            <p style="margin:0;flex:1;min-width:200px;">
+                <span style="font-weight:600;">@_lastLabel</span>
+                · HTTP <span style="font-weight:600;color:@StatusColor(_lastStatus);">@_lastStatus</span>
+                @if (!string.IsNullOrEmpty(_lastEquivRest))
+                {
+                    <span style="font-size:0.88rem;color:#555;"> · 等同請求：<code style="word-break:break-all;">@_lastEquivRest</code></span>
+                }
+            </p>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                <span style="font-size:0.9rem;font-weight:600;color:#444;">顯示</span>
+                <button type="button" style="@ViewToggleStyle(_resultView == ResultViewKind.Json)" @onclick="() => _resultView = ResultViewKind.Json">JSON 文字</button>
+                <button type="button" style="@ViewToggleStyle(_resultView == ResultViewKind.Tree)" @onclick="() => _resultView = ResultViewKind.Tree">樹狀</button>
+            </div>
+        </div>
+        @if (_resultView == ResultViewKind.Json)
+        {
+            <pre style="margin:0;padding:12px;background:#f6f8fa;border:1px solid #e1e4e8;border-radius:6px;overflow:auto;max-height:70vh;font-size:0.82rem;line-height:1.45;">@_lastPrettyBody</pre>
+        }
+        else
+        {
+            <JsonTreeView @key="_resultVersion" Json="@_lastRawJson" />
+        }
+    }
+</section>
+
+<style>
+    .qb { padding: 14px 16px; border: 1px solid #c8d9e8; border-radius: 8px; background: #f7fbff; }
+    .qb h3 { margin: 0 0 10px; font-size: 1.05rem; }
+    .qb .hint { margin: 0 0 12px; font-size: 0.92rem; color: #444; line-height: 1.55; }
+    .qb .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .qb .row label { min-width: 140px; font-weight: 600; font-size: 0.9rem; }
+    .qb .row input { flex: 1; min-width: 200px; padding: 6px 10px; box-sizing: border-box; }
+    .qb button.primary { margin-top: 6px; padding: 8px 18px; border: 1px solid #0d6efd; background: #0d6efd; color: #fff; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    .qb button.primary:disabled { opacity: 0.55; cursor: not-allowed; }
+</style>
+
+@code {
+    private static readonly JsonSerializerOptions PrettyJsonOptions = new() { WriteIndented = true };
+
+    private static readonly (string Id, string Label)[] Tabs =
+    [
+        ("expand", "ValueSet $expand"),
+        ("lookup", "CodeSystem $lookup"),
+        ("validate-vs", "ValueSet $validate-code"),
+        ("validate-cs", "CodeSystem $validate-code"),
+        ("validate-binding", "Binding 驗證"),
+        ("translate", "ConceptMap $translate"),
+        ("subsumes", "CodeSystem $subsumes"),
+    ];
+
+    private string _tab = "expand";
+    private string? _fhirSpecVersion;
+
+    private string? _vsId, _vsUrl, _vsFilter, _vsOffset, _vsCount;
+    private string? _lkCsId, _lkSystem, _lkCode, _lkVersion;
+    private string? _vvVsId, _vvUrl, _vvCode, _vvSystem, _vvDisplay;
+    private string? _vcCsId, _vcUrl, _vcCode, _vcSystem, _vcDisplay;
+    private string? _bdProfile, _bdPath, _bdCode, _bdSystem, _bdDisplay;
+    private string? _trCmId, _trUrl, _trSourceCode, _trSourceSystem, _trTargetSystem;
+    private string? _subCsId, _subSystem, _subCodeA, _subCodeB, _subVersion;
+
+    private bool _busy;
+    private string? _lastLabel;
+    private int _lastStatus;
+    private string _lastPrettyBody = "";
+    private string _lastRawJson = "";
+    private int _resultVersion;
+    private string? _lastEquivRest;
+    private ResultViewKind _resultView = ResultViewKind.Tree;
+
+    private enum ResultViewKind { Json, Tree }
+
+    private static string TabStyle(bool active) =>
+        active
+            ? "padding:8px 14px;border:1px solid #0d6efd;background:#0d6efd;color:#fff;border-radius:6px;cursor:pointer;font-weight:600;"
+            : "padding:8px 14px;border:1px solid #bbb;background:#fff;border-radius:6px;cursor:pointer;";
+
+    private static string StatusColor(int status) =>
+        status is >= 200 and <= 299 ? "#1b5e20" : status is >= 400 ? "#b71c1c" : "#333";
+
+    private static string ViewToggleStyle(bool active) =>
+        active
+            ? "padding:6px 12px;border:1px solid #0d6efd;background:#0d6efd;color:#fff;border-radius:6px;cursor:pointer;font-size:0.88rem;font-weight:600;"
+            : "padding:6px 12px;border:1px solid #ccc;background:#fff;color:#333;border-radius:6px;cursor:pointer;font-size:0.88rem;";
+
+    private string? Fv() => string.IsNullOrWhiteSpace(_fhirSpecVersion) ? null : _fhirSpecVersion.Trim();
+
+    private static string PrettyOrRaw(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "(empty body)";
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc.RootElement, PrettyJsonOptions);
+        }
+        catch
+        {
+            return json;
+        }
+    }
+
+    private async Task RunExpandAsync()
+    {
+        await RunAsync("ValueSet $expand", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            if (!string.IsNullOrWhiteSpace(_vsId))
+                _lastEquivRest = $"GET {origin}/fhir/ValueSet/{Uri.EscapeDataString(_vsId.Trim())}/$expand?…{fvQ}";
+            else if (!string.IsNullOrWhiteSpace(_vsUrl))
+                _lastEquivRest = $"GET {origin}/fhir/ValueSet/$expand?url=…{fvQ}";
+            else
+                _lastEquivRest = $"GET {origin}/fhir/ValueSet/$expand?…{fvQ}";
+
+            int? off = int.TryParse(_vsOffset?.Trim(), out var o) ? o : null;
+            int? cnt = int.TryParse(_vsCount?.Trim(), out var c) ? c : null;
+            return await Orchestrator.ExpandValueSetAsync(
+                string.IsNullOrWhiteSpace(_vsId) ? null : _vsId.Trim(),
+                string.IsNullOrWhiteSpace(_vsUrl) ? null : _vsUrl.Trim(),
+                string.IsNullOrWhiteSpace(_vsFilter) ? null : _vsFilter.Trim(),
+                off,
+                cnt,
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunLookupAsync()
+    {
+        await RunAsync("CodeSystem $lookup", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            _lastEquivRest = $"GET {origin}/fhir/CodeSystem/$lookup?code=…&system=…{fvQ}";
+
+            return await Orchestrator.LookupAsync(
+                string.IsNullOrWhiteSpace(_lkCsId) ? null : _lkCsId.Trim(),
+                string.IsNullOrWhiteSpace(_lkSystem) ? null : _lkSystem.Trim(),
+                _lkCode?.Trim() ?? "",
+                string.IsNullOrWhiteSpace(_lkVersion) ? null : _lkVersion.Trim(),
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunValidateVsAsync()
+    {
+        await RunAsync("ValueSet $validate-code", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            _lastEquivRest = $"GET {origin}/fhir/ValueSet/$validate-code?…{fvQ}";
+
+            return await Orchestrator.ValidateCodeValueSetAsync(
+                string.IsNullOrWhiteSpace(_vvVsId) ? null : _vvVsId.Trim(),
+                string.IsNullOrWhiteSpace(_vvUrl) ? null : _vvUrl.Trim(),
+                string.IsNullOrWhiteSpace(_vvCode) ? null : _vvCode.Trim(),
+                string.IsNullOrWhiteSpace(_vvSystem) ? null : _vvSystem.Trim(),
+                string.IsNullOrWhiteSpace(_vvDisplay) ? null : _vvDisplay.Trim(),
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunValidateCsAsync()
+    {
+        await RunAsync("CodeSystem $validate-code", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            _lastEquivRest = $"GET {origin}/fhir/CodeSystem/$validate-code?…{fvQ}";
+
+            return await Orchestrator.ValidateCodeCodeSystemAsync(
+                string.IsNullOrWhiteSpace(_vcCsId) ? null : _vcCsId.Trim(),
+                string.IsNullOrWhiteSpace(_vcUrl) ? null : _vcUrl.Trim(),
+                _vcCode?.Trim() ?? "",
+                string.IsNullOrWhiteSpace(_vcSystem) ? null : _vcSystem.Trim(),
+                string.IsNullOrWhiteSpace(_vcDisplay) ? null : _vcDisplay.Trim(),
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunValidateBindingAsync()
+    {
+        await RunAsync("Binding 脈絡驗證", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            _lastEquivRest = $"GET {origin}/fhir/ValueSet/$validate-code?profile=…&path=…";
+
+            return await Orchestrator.ValidateCodeWithBindingContextAsync(
+                string.IsNullOrWhiteSpace(_bdProfile) ? null : _bdProfile.Trim(),
+                string.IsNullOrWhiteSpace(_bdPath) ? null : _bdPath.Trim(),
+                string.IsNullOrWhiteSpace(_bdCode) ? null : _bdCode.Trim(),
+                string.IsNullOrWhiteSpace(_bdSystem) ? null : _bdSystem.Trim(),
+                string.IsNullOrWhiteSpace(_bdDisplay) ? null : _bdDisplay.Trim(),
+                ct);
+        });
+    }
+
+    private async Task RunTranslateAsync()
+    {
+        await RunAsync("ConceptMap $translate", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            _lastEquivRest = $"GET {origin}/fhir/ConceptMap/$translate?…{fvQ}";
+
+            return await Orchestrator.TranslateAsync(
+                string.IsNullOrWhiteSpace(_trCmId) ? null : _trCmId.Trim(),
+                string.IsNullOrWhiteSpace(_trUrl) ? null : _trUrl.Trim(),
+                _trSourceCode?.Trim() ?? "",
+                _trSourceSystem?.Trim() ?? "",
+                string.IsNullOrWhiteSpace(_trTargetSystem) ? null : _trTargetSystem.Trim(),
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunSubsumesAsync()
+    {
+        await RunAsync("CodeSystem $subsumes", async ct =>
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var fv = Fv();
+            var fvQ = string.IsNullOrEmpty(fv) ? "" : $"&fhirSpecVersion={Uri.EscapeDataString(fv)}";
+            _lastEquivRest = $"GET {origin}/fhir/CodeSystem/$subsumes?…{fvQ}";
+
+            return await Orchestrator.SubsumesAsync(
+                string.IsNullOrWhiteSpace(_subCsId) ? null : _subCsId.Trim(),
+                _subSystem?.Trim() ?? "",
+                _subCodeA?.Trim() ?? "",
+                _subCodeB?.Trim() ?? "",
+                string.IsNullOrWhiteSpace(_subVersion) ? null : _subVersion.Trim(),
+                fv,
+                ct);
+        });
+    }
+
+    private async Task RunAsync(string label, Func<CancellationToken, Task<FhirOperationResult>> exec)
+    {
+        _busy = true;
+        _lastLabel = label;
+        _lastEquivRest = null;
+        try
+        {
+            var r = await exec(CancellationToken.None);
+            _lastStatus = r.HttpStatus;
+            _lastRawJson = r.JsonBody ?? "";
+            _lastPrettyBody = PrettyOrRaw(r.JsonBody ?? "");
+            _resultVersion++;
+        }
+        catch (Exception ex)
+        {
+            _lastStatus = (int)HttpStatusCode.InternalServerError;
+            _lastPrettyBody = JsonSerializer.Serialize(new { error = ex.Message }, PrettyJsonOptions);
+            _lastRawJson = _lastPrettyBody;
+            _resultVersion++;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

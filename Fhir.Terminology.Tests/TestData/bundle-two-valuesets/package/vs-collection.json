@@ -1,0 +1,31 @@
+{
+  "resourceType": "Bundle",
+  "id": "fixture-vs-bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "fullUrl": "http://example.org/fhir/ValueSet/fixture-a",
+      "resource": {
+        "resourceType": "ValueSet",
+        "id": "fixture-import-vs-a",
+        "url": "http://example.org/fhir/ValueSet/fixture-a",
+        "status": "active",
+        "compose": {
+          "include": [{ "system": "http://hl7.org/fhir/administrative-gender" }]
+        }
+      }
+    },
+    {
+      "fullUrl": "http://example.org/fhir/ValueSet/fixture-b",
+      "resource": {
+        "resourceType": "ValueSet",
+        "id": "fixture-import-vs-b",
+        "url": "http://example.org/fhir/ValueSet/fixture-b",
+        "status": "active",
+        "compose": {
+          "include": [{ "system": "http://hl7.org/fhir/administrative-gender" }]
+        }
+      }
+    }
+  ]
+}

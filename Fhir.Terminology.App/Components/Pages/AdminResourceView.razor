@@ -1,0 +1,789 @@
+@page "/admin/resources/view/{ResourceType}/{LogicalId}"
+@rendermode @(new InteractiveServerRenderMode())
+@using System.Text.Json
+@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components
+@using Microsoft.Extensions.Options
+@using Fhir.Terminology.Core
+@inject ITerminologyRepository Repository
+@inject IOptions<TerminologyServerOptions> TerminologyOptions
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>術語資源檢視</PageTitle>
+
+<p style="margin-bottom:12px;"><a href="/admin/resources">← 返回資源列表</a></p>
+
+@if (_loading)
+{
+    <p>載入中…</p>
+}
+else if (_error is not null)
+{
+    <div style="padding:14px 16px;background:#ffebee;border:1px solid #ef5350;border-radius:8px;max-width:720px;color:#b71c1c;">@_error</div>
+}
+else if (_row is not null && _document is not null)
+{
+    var root = _document.RootElement;
+    var rt = GetString(root, "resourceType") ?? ResourceType;
+
+    <article style="max-width:960px;line-height:1.55;">
+        <header style="margin-bottom:20px;padding-bottom:12px;border-bottom:1px solid #ccc;">
+            <h1 style="font-size:1.35rem;margin:0 0 8px;">@rt</h1>
+            <p style="margin:0;font-size:1rem;color:#333;">
+                <strong>Logical id：</strong><code>@GetString(root, "id")</code>
+                @if (!string.IsNullOrEmpty(_row.FhirSpecVersion))
+                {
+                    <span style="margin-left:12px;"><strong>FHIR 規格：</strong><code>@_row.FhirSpecVersion</code></span>
+                }
+            </p>
+            <p style="margin:10px 0 0;font-size:0.92rem;">
+                <a href="@RestJsonAbsoluteUri" target="_blank" rel="noopener noreferrer">開啟 REST JSON（GET）</a>
+            </p>
+            <p style="margin:4px 0 0;font-size:0.82rem;color:#555;word-break:break-all;"><code>@RestJsonAbsoluteUri</code></p>
+        </header>
+
+        @{
+            var narrativeDiv = GetNarrativeDiv(root);
+            var textStatus = GetTextStatus(root);
+        }
+        @if (!string.IsNullOrWhiteSpace(narrativeDiv))
+        {
+            <section style="margin-bottom:20px;padding:14px 16px;border:1px solid #b8d4e8;border-radius:8px;background:#f7fbff;">
+                <h2 style="font-size:1.05rem;margin:0 0 10px;">敘述（<code>text.div</code>）</h2>
+                <p style="margin:0 0 12px;font-size:0.88rem;color:#444;">
+                    FHIR 規格之<strong>人類可讀敘述</strong>（Narrative）；HL7 發佈檔通常會帶完整 XHTML。若僅見空壳，可改看下方摘要或 JSON。
+                    <span style="display:block;margin-top:6px;">敘述裡若為相對路徑（例如 <code>codesystem-*.html</code>），已依本資源之 FHIR 規格版本改寫為 <strong>hl7.org</strong> 線上文件，避免在 localhost 被誤判為本機檔案。</span>
+                    @if (!string.IsNullOrEmpty(textStatus))
+                    {
+                        <span><code>text.status</code>：<strong>@textStatus</strong></span>
+                    }
+                </p>
+                <div class="fhir-narrative-div" style="overflow-x:auto;font-size:0.96rem;line-height:1.6;">
+                    @((MarkupString)PrepareNarrativeHtmlForDisplay(narrativeDiv, _row.FhirSpecVersion))
+                </div>
+            </section>
+        }
+
+        <section style="margin-bottom:18px;padding:12px 14px;background:#f8f9fa;border-radius:8px;border:1px solid #e0e0e0;">
+            <h2 style="font-size:1.05rem;margin:0 0 10px;">摘要</h2>
+            <dl style="margin:0;display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:0.95rem;">
+                @SummaryRow("Url", GetString(root, "url"))
+                @SummaryRow("Name", GetString(root, "name"))
+                @SummaryRow("Title", GetString(root, "title"))
+                @SummaryRow("Status", GetString(root, "status"))
+                @SummaryRow("Version（business）", GetString(root, "version"))
+                @SummaryRow("Publisher", GetString(root, "publisher"))
+                @SummaryRow("Date", GetString(root, "date"))
+                @SummaryRow("Content", GetString(root, "content"))
+            </dl>
+            @{
+                var desc = GetString(root, "description");
+            }
+            @if (!string.IsNullOrEmpty(desc))
+            {
+                <div style="margin-top:12px;">
+                    <strong style="display:block;margin-bottom:4px;font-size:0.95rem;">Description</strong>
+                    <div style="white-space:pre-wrap;color:#333;font-size:0.95rem;">@desc</div>
+                </div>
+            }
+        </section>
+
+        @if (string.Equals(rt, "CodeSystem", StringComparison.Ordinal))
+        {
+            <section style="margin-bottom:18px;">
+                <h2 style="font-size:1.05rem;margin:0 0 10px;">概念（concept）</h2>
+                @RenderConceptTable(root)
+            </section>
+        }
+        else if (string.Equals(rt, "ValueSet", StringComparison.Ordinal))
+        {
+            <section style="margin-bottom:18px;padding:12px 14px;border:1px solid #b8d4e8;border-radius:8px;background:#f7fbff;max-width:960px;">
+                <h2 style="font-size:1.05rem;margin:0 0 8px;">可能碼值（為何上方看不到列表）</h2>
+                <p style="margin:0;font-size:0.92rem;line-height:1.65;color:#333;">
+                    HL7 規格發佈檔中的 ValueSet 多數<strong>沒有內建 <code>expansion</code></strong>（須經 <code>$expand</code> 運算才會產生 <code>expansion.contains</code>）。
+                    若 <code>compose.include</code> 只寫「納入某個 CodeSystem 全部碼」而<strong>未逐筆列出</strong> <code>concept</code>（例如 AdministrativeGender），本站 Compose 區僅會看到 system URI，而<strong>不會</strong>自動列出 male／female 等碼。
+                    請用下列任一方式檢視全部可能碼：
+                </p>
+                <ul style="margin:10px 0 0 1.1rem;line-height:1.75;font-size:0.95rem;">
+                    @if (!string.IsNullOrEmpty(_vsExpandHref))
+                    {
+                        <li>
+                            <a href="@_vsExpandHref" target="_blank" rel="noopener noreferrer"><strong>開啟 REST：<code>ValueSet/$expand</code></strong></a>
+                            <span style="color:#555;font-size:0.88rem;">（回傳 JSON，含展開後碼列）</span>
+                        </li>
+                    }
+                    @foreach (var link in _vsCodeSystemLinks)
+                    {
+                        <li>
+                            <a href="@link.Href">本站檢視對應 CodeSystem</a>
+                            <span style="color:#555;font-size:0.88rem;"> — <code>@link.SystemUri</code></span>
+                        </li>
+                    }
+                    @if (string.IsNullOrEmpty(_vsExpandHref) && _vsCodeSystemLinks.Count == 0)
+                    {
+                        <li style="color:#666;">無法產生連結（請確認 ValueSet 含 <code>url</code>，且已匯入相關 CodeSystem）。</li>
+                    }
+                </ul>
+            </section>
+            <section style="margin-bottom:18px;">
+                <h2 style="font-size:1.05rem;margin:0 0 10px;">Compose</h2>
+                @RenderValueSetCompose(root)
+            </section>
+            @if (root.TryGetProperty("expansion", out var exp))
+            {
+                <section style="margin-bottom:18px;">
+                    <h2 style="font-size:1.05rem;margin:0 0 10px;">Expansion（資源內已預先展開時）</h2>
+                    @RenderValueSetExpansion(exp)
+                </section>
+            }
+        }
+        else if (string.Equals(rt, "ConceptMap", StringComparison.Ordinal))
+        {
+            <section style="margin-bottom:18px;">
+                <h2 style="font-size:1.05rem;margin:0 0 10px;">對照（group）</h2>
+                @RenderConceptMapGroups(root)
+            </section>
+        }
+        else if (string.Equals(rt, "StructureDefinition", StringComparison.Ordinal))
+        {
+            <section style="margin-bottom:18px;">
+                <h2 style="font-size:1.05rem;margin:0 0 10px;">術語綁定（binding）</h2>
+                <p style="margin:0 0 10px;font-size:0.92rem;color:#444;">
+                    擷取自 <code>snapshot</code>／<code>differential</code>；完整追溯（含本地 ValueSet）請用 <a href="/admin/bindings">Binding 查詢頁</a>。
+                </p>
+                @RenderStructureDefinitionBindings(_row!.RawJson)
+            </section>
+        }
+
+        <details style="margin-top:20px;padding:12px;border:1px solid #ccc;border-radius:8px;background:#fff;">
+            <summary style="cursor:pointer;font-weight:600;">完整 JSON（縮排）</summary>
+            <pre style="margin:12px 0 0;padding:12px;background:#1e1e1e;color:#d4d4d4;border-radius:6px;overflow:auto;max-height:420px;font-size:12px;line-height:1.45;">@_prettyJson</pre>
+        </details>
+    </article>
+}
+
+@code {
+    private const int MaxConceptRows = 400;
+
+    [Parameter] public string ResourceType { get; set; } = "";
+
+    [Parameter] public string LogicalId { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "fhirSpecVersion")]
+    public string? FhirSpecVersionQuery { get; set; }
+
+    private bool _loading = true;
+    private string? _error;
+    private StoredResourceRow? _row;
+    private JsonDocument? _document;
+    private string _prettyJson = "";
+    /// <summary>含目前站台基底（本機即 https://localhost:…）與 <c>fhirSpecVersion</c> 之 REST 讀取 URL。</summary>
+    private string RestJsonAbsoluteUri
+    {
+        get
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            var path = $"/fhir/{Uri.EscapeDataString(ResourceType)}/{Uri.EscapeDataString(LogicalId)}";
+            return string.IsNullOrEmpty(_fhirSpecQuery)
+                ? $"{origin}{path}"
+                : $"{origin}{path}?{_fhirSpecQuery}";
+        }
+    }
+
+    private string _fhirSpecQuery = "";
+
+    /// <summary>本站 <c>ValueSet/$expand?url=…</c> 連結（供檢視展開後碼列）。</summary>
+    private string? _vsExpandHref;
+
+    private List<ValueSetCodeSystemLink> _vsCodeSystemLinks = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _document?.Dispose();
+        _document = null;
+        _row = null;
+        _prettyJson = "";
+        _vsExpandHref = null;
+        _vsCodeSystemLinks = [];
+
+        try
+        {
+            var fv = string.IsNullOrWhiteSpace(FhirSpecVersionQuery)
+                ? FhirSpecVersionNormalizer.Normalize(TerminologyOptions.Value.FhirVersionLabel)
+                : FhirSpecVersionNormalizer.Normalize(FhirSpecVersionQuery);
+
+            _fhirSpecQuery = $"fhirSpecVersion={Uri.EscapeDataString(fv)}";
+
+            var row = await Repository.GetAsync(ResourceType, LogicalId, fv);
+            if (row is null)
+            {
+                _error = $"找不到資源 {ResourceType}/{LogicalId}（FHIR 規格版本 {fv}）。請由資源列表的 VIEW 連結進入，或確認 query 參數 fhirSpecVersion。";
+                return;
+            }
+
+            _row = row;
+            _document = JsonDocument.Parse(row.RawJson);
+            _prettyJson = JsonSerializer.Serialize(_document.RootElement, PrettyJsonOptions);
+
+            if (string.Equals(ResourceType, "ValueSet", StringComparison.Ordinal))
+                await PopulateValueSetViewerHintsAsync(_document.RootElement, fv);
+        }
+        catch (Exception ex)
+        {
+            _error = "載入失敗：" + ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _document?.Dispose();
+    }
+
+    private sealed record ValueSetCodeSystemLink(string SystemUri, string Href);
+
+    private async Task PopulateValueSetViewerHintsAsync(JsonElement root, string fhirSpecVersion)
+    {
+        var vsUrl = GetString(root, "url");
+        if (!string.IsNullOrEmpty(vsUrl))
+        {
+            var origin = Navigation.BaseUri.TrimEnd('/');
+            _vsExpandHref = $"{origin}/fhir/ValueSet/$expand?url={Uri.EscapeDataString(vsUrl)}&{_fhirSpecQuery}";
+        }
+
+        if (!root.TryGetProperty("compose", out var compose))
+            return;
+        if (!compose.TryGetProperty("include", out var includes) || includes.ValueKind != JsonValueKind.Array)
+            return;
+
+        var originBase = Navigation.BaseUri.TrimEnd('/');
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var block in includes.EnumerateArray())
+        {
+            var sys = GetString(block, "system");
+            if (string.IsNullOrEmpty(sys) || !seen.Add(sys))
+                continue;
+
+            var cs = await Repository.FindByUrlAsync("CodeSystem", sys, null, fhirSpecVersion);
+            if (cs is null)
+                continue;
+
+            var href = $"{originBase}/admin/resources/view/CodeSystem/{Uri.EscapeDataString(cs.LogicalId)}?{_fhirSpecQuery}";
+            _vsCodeSystemLinks.Add(new ValueSetCodeSystemLink(sys, href));
+        }
+    }
+
+    private static readonly JsonSerializerOptions PrettyJsonOptions = new() { WriteIndented = true };
+
+    private RenderFragment SummaryRow(string label, string? value) => builder =>
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        builder.OpenElement(0, "dt");
+        builder.AddContent(1, label);
+        builder.CloseElement();
+        builder.OpenElement(2, "dd");
+        builder.AddContent(3, value);
+        builder.CloseElement();
+    };
+
+    private RenderFragment RenderConceptTable(JsonElement root)
+    {
+        return builder =>
+        {
+            if (!root.TryGetProperty("concept", out var concepts) || concepts.ValueKind != JsonValueKind.Array)
+            {
+                builder.AddContent(0, new MarkupString("<p style=\"color:#666;margin:0;\">此 CodeSystem 無 <code>concept</code> 陣列（可能為 <code>content=not-present</code> 或引用外部詞表）。</p>"));
+                return;
+            }
+
+            var n = concepts.GetArrayLength();
+            builder.OpenElement(1, "div");
+            builder.AddAttribute(2, "style", "overflow-x:auto;");
+            builder.OpenElement(3, "table");
+            builder.AddAttribute(4, "style", "border-collapse:collapse;width:100%;font-size:0.9rem;");
+            builder.OpenElement(5, "thead");
+            builder.OpenElement(6, "tr");
+            foreach (var h in new[] { "#", "code", "display", "definition" })
+            {
+                builder.OpenElement(7, "th");
+                builder.AddAttribute(8, "style", "padding:8px;border:1px solid #ccc;background:#eee;text-align:left;");
+                builder.AddContent(9, h);
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+            builder.CloseElement();
+
+            builder.OpenElement(10, "tbody");
+            var show = Math.Min(n, MaxConceptRows);
+            for (var i = 0; i < show; i++)
+            {
+                var c = concepts[i];
+                builder.OpenElement(11, "tr");
+                foreach (var cell in new[]
+                         {
+                             (i + 1).ToString(),
+                             GetString(c, "code") ?? "—",
+                             GetString(c, "display") ?? "—",
+                             GetString(c, "definition") ?? "—"
+                         })
+                {
+                    builder.OpenElement(12, "td");
+                    builder.AddAttribute(13, "style", "padding:6px 8px;border:1px solid #ccc;vertical-align:top;");
+                    builder.AddContent(14, cell);
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.CloseElement();
+
+            if (n > MaxConceptRows)
+            {
+                builder.OpenElement(15, "p");
+                builder.AddAttribute(16, "style", "margin:8px 0 0;font-size:0.9rem;color:#666;");
+                builder.AddContent(17, $"僅顯示前 {MaxConceptRows} 筆（共 {n} 筆）。完整內容請見下方 JSON。");
+                builder.CloseElement();
+            }
+        };
+    }
+
+    private RenderFragment RenderValueSetCompose(JsonElement root)
+    {
+        return builder =>
+        {
+            if (!root.TryGetProperty("compose", out var compose))
+            {
+                builder.AddContent(0, new MarkupString("<p style=\"color:#666;\">無 compose。</p>"));
+                return;
+            }
+
+            builder.OpenElement(1, "div");
+            builder.AddAttribute(2, "style", "font-size:0.95rem;");
+            if (compose.TryGetProperty("include", out var inc) && inc.ValueKind == JsonValueKind.Array)
+            {
+                var i = 0;
+                foreach (var block in inc.EnumerateArray())
+                {
+                    i++;
+                    builder.OpenElement(3, "div");
+                    builder.AddAttribute(4, "style", "margin-bottom:12px;padding:10px 12px;border:1px solid #ddd;border-radius:6px;background:#fafafa;");
+                    builder.OpenElement(5, "strong");
+                    builder.AddContent(6, $"Include #{i}");
+                    builder.CloseElement();
+                    builder.OpenElement(7, "ul");
+                    builder.AddAttribute(8, "style", "margin:8px 0 0 1.2rem;");
+                    var sys = GetString(block, "system");
+                    if (!string.IsNullOrEmpty(sys))
+                    {
+                        builder.OpenElement(9, "li");
+                        builder.AddContent(10, $"system: {sys}");
+                        builder.CloseElement();
+                    }
+                    var ver = GetString(block, "version");
+                    if (!string.IsNullOrEmpty(ver))
+                    {
+                        builder.OpenElement(11, "li");
+                        builder.AddContent(12, $"version: {ver}");
+                        builder.CloseElement();
+                    }
+                    if (block.TryGetProperty("concept", out var cc) && cc.ValueKind == JsonValueKind.Array && cc.GetArrayLength() > 0)
+                    {
+                        builder.OpenElement(13, "li");
+                        builder.AddContent(14, $"concept：{cc.GetArrayLength()} 筆（見下表）");
+                        builder.CloseElement();
+                        builder.OpenElement(21, "div");
+                        builder.AddAttribute(22, "style", "margin-top:10px;overflow-x:auto;");
+                        builder.OpenElement(23, "table");
+                        builder.AddAttribute(24, "style", "border-collapse:collapse;width:100%;font-size:0.88rem;");
+                        builder.OpenElement(25, "thead");
+                        builder.OpenElement(26, "tr");
+                        foreach (var h in new[] { "#", "code", "display", "definition" })
+                        {
+                            builder.OpenElement(27, "th");
+                            builder.AddAttribute(28, "style", "padding:6px;border:1px solid #ccc;background:#eee;text-align:left;");
+                            builder.AddContent(29, h);
+                            builder.CloseElement();
+                        }
+
+                        builder.CloseElement();
+                        builder.CloseElement();
+                        builder.OpenElement(30, "tbody");
+                        var nConcept = Math.Min(cc.GetArrayLength(), MaxConceptRows);
+                        for (var ci = 0; ci < nConcept; ci++)
+                        {
+                            var con = cc[ci];
+                            builder.OpenElement(31, "tr");
+                            builder.OpenElement(32, "td");
+                            builder.AddAttribute(33, "style", "padding:4px 6px;border:1px solid #ccc;");
+                            builder.AddContent(34, (ci + 1).ToString());
+                            builder.CloseElement();
+                            foreach (var key in new[] { "code", "display", "definition" })
+                            {
+                                builder.OpenElement(35, "td");
+                                builder.AddAttribute(36, "style", "padding:4px 6px;border:1px solid #ccc;word-break:break-all;");
+                                builder.AddContent(37, GetString(con, key) ?? "—");
+                                builder.CloseElement();
+                            }
+
+                            builder.CloseElement();
+                        }
+
+                        builder.CloseElement();
+                        builder.CloseElement();
+                        builder.CloseElement();
+                        if (cc.GetArrayLength() > MaxConceptRows)
+                        {
+                            builder.OpenElement(38, "p");
+                            builder.AddAttribute(39, "style", "margin:6px 0 0;font-size:0.85rem;color:#666;");
+                            builder.AddContent(40, $"僅顯示前 {MaxConceptRows} 筆（共 {cc.GetArrayLength()} 筆），完整內容見下方 JSON。");
+                            builder.CloseElement();
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(GetString(block, "system")))
+                    {
+                        builder.OpenElement(41, "li");
+                        builder.AddContent(42, "未逐筆列出 concept：表示「納入該 system 之全部碼」，請用頁面上方 $expand 或對應 CodeSystem 檢視。");
+                        builder.CloseElement();
+                    }
+                    builder.CloseElement();
+                    builder.CloseElement();
+                }
+            }
+            else
+            {
+                builder.AddContent(20, "compose 無 include 或格式非預期。");
+            }
+            builder.CloseElement();
+        };
+    }
+
+    private RenderFragment RenderValueSetExpansion(JsonElement expansion)
+    {
+        return builder =>
+        {
+            if (!expansion.TryGetProperty("contains", out var contains) || contains.ValueKind != JsonValueKind.Array)
+            {
+                builder.AddContent(0, new MarkupString("<p style=\"color:#666;\">expansion 無 contains。</p>"));
+                return;
+            }
+
+            var total = contains.GetArrayLength();
+            builder.OpenElement(1, "p");
+            builder.AddAttribute(2, "style", "font-size:0.92rem;color:#555;");
+            builder.AddContent(3, $"contains：{total} 筆（表格最多顯示 {MaxConceptRows} 筆）");
+            builder.CloseElement();
+
+            builder.OpenElement(4, "div");
+            builder.AddAttribute(5, "style", "overflow-x:auto;");
+            builder.OpenElement(6, "table");
+            builder.AddAttribute(7, "style", "border-collapse:collapse;width:100%;font-size:0.88rem;");
+            builder.OpenElement(8, "thead");
+            builder.OpenElement(9, "tr");
+            foreach (var h in new[] { "#", "system", "code", "display" })
+            {
+                builder.OpenElement(10, "th");
+                builder.AddAttribute(11, "style", "padding:6px;border:1px solid #ccc;background:#eee;text-align:left;");
+                builder.AddContent(12, h);
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.OpenElement(13, "tbody");
+            var show = Math.Min(total, MaxConceptRows);
+            for (var i = 0; i < show; i++)
+            {
+                var c = contains[i];
+                builder.OpenElement(14, "tr");
+                builder.OpenElement(15, "td");
+                builder.AddAttribute(16, "style", "padding:4px 6px;border:1px solid #ccc;");
+                builder.AddContent(17, (i + 1).ToString());
+                builder.CloseElement();
+                foreach (var key in new[] { "system", "code", "display" })
+                {
+                    builder.OpenElement(18, "td");
+                    builder.AddAttribute(19, "style", "padding:4px 6px;border:1px solid #ccc;word-break:break-all;");
+                    builder.AddContent(20, GetString(c, key) ?? "—");
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+            builder.CloseElement();
+            builder.CloseElement();
+        };
+    }
+
+    private RenderFragment RenderConceptMapGroups(JsonElement root)
+    {
+        return builder =>
+        {
+            if (!root.TryGetProperty("group", out var groups) || groups.ValueKind != JsonValueKind.Array)
+            {
+                builder.AddContent(0, new MarkupString("<p style=\"color:#666;\">無 group。</p>"));
+                return;
+            }
+
+            var gi = 0;
+            foreach (var g in groups.EnumerateArray())
+            {
+                gi++;
+                builder.OpenElement(1, "div");
+                builder.AddAttribute(2, "style", "margin-bottom:16px;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fafafa;");
+                builder.OpenElement(3, "p");
+                builder.AddAttribute(4, "style", "margin:0 0 8px;font-weight:600;");
+                builder.AddContent(5, $"Group {gi}");
+                builder.CloseElement();
+                builder.OpenElement(6, "p");
+                builder.AddAttribute(7, "style", "margin:0 0 10px;font-size:0.92rem;");
+                builder.AddContent(8, $"source：{GetString(g, "source") ?? "—"} → target：{GetString(g, "target") ?? "—"}");
+                builder.CloseElement();
+
+                if (!g.TryGetProperty("element", out var elements) || elements.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                builder.OpenElement(9, "div");
+                builder.AddAttribute(10, "style", "overflow-x:auto;");
+                builder.OpenElement(11, "table");
+                builder.AddAttribute(12, "style", "border-collapse:collapse;width:100%;font-size:0.88rem;");
+                builder.OpenElement(13, "thead");
+                builder.OpenElement(14, "tr");
+                foreach (var h in new[] { "source code", "relationship / target" })
+                {
+                    builder.OpenElement(15, "th");
+                    builder.AddAttribute(16, "style", "padding:6px;border:1px solid #ccc;background:#eee;text-align:left;");
+                    builder.AddContent(17, h);
+                    builder.CloseElement();
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.OpenElement(18, "tbody");
+                var rows = 0;
+                foreach (var el in elements.EnumerateArray())
+                {
+                    if (rows >= MaxConceptRows)
+                        break;
+                    var srcCode = GetString(el, "code") ?? "—";
+                    var tgtText = FormatConceptMapTargets(el);
+                    builder.OpenElement(19, "tr");
+                    builder.OpenElement(20, "td");
+                    builder.AddAttribute(21, "style", "padding:4px 6px;border:1px solid #ccc;vertical-align:top;");
+                    builder.AddContent(22, srcCode);
+                    builder.CloseElement();
+                    builder.OpenElement(23, "td");
+                    builder.AddAttribute(24, "style", "padding:4px 6px;border:1px solid #ccc;vertical-align:top;white-space:pre-wrap;");
+                    builder.AddContent(25, tgtText);
+                    builder.CloseElement();
+                    builder.CloseElement();
+                    rows++;
+                }
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+            }
+        };
+    }
+
+    private RenderFragment RenderStructureDefinitionBindings(string rawJson) => builder =>
+    {
+        var rows = StructureDefinitionBindingDiscoverer.ListAllBindings(rawJson);
+        if (rows.Count == 0)
+        {
+            builder.AddContent(0, new MarkupString("<p style=\"color:#666;margin:0;\">無 binding（或尚無 snapshot／differential）。</p>"));
+            return;
+        }
+
+        const int maxRows = 500;
+        var show = rows.Take(maxRows).ToList();
+
+        builder.OpenElement(1, "div");
+        builder.AddAttribute(2, "style", "overflow-x:auto;");
+        builder.OpenElement(3, "table");
+        builder.AddAttribute(4, "style", "border-collapse:collapse;width:100%;font-size:0.88rem;");
+        builder.OpenElement(5, "thead");
+        builder.OpenElement(6, "tr");
+        foreach (var h in new[] { "path", "strength", "ValueSet", "槽" })
+        {
+            builder.OpenElement(7, "th");
+            builder.AddAttribute(8, "style", "padding:6px;border:1px solid #ccc;background:#eee;text-align:left;");
+            builder.AddContent(9, h);
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.OpenElement(10, "tbody");
+        foreach (var r in show)
+        {
+            builder.OpenElement(11, "tr");
+            foreach (var cell in new[]
+                     {
+                         r.ElementPath,
+                         r.Strength,
+                         r.ValueSetCanonical,
+                         r.Slot == StructureDefinitionBindingSlot.Primary ? "主" : "附加"
+                     })
+            {
+                builder.OpenElement(12, "td");
+                builder.AddAttribute(13, "style", "padding:4px 6px;border:1px solid #ccc;word-break:break-all;");
+                builder.AddContent(14, cell);
+                builder.CloseElement();
+            }
+
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+
+        if (rows.Count > maxRows)
+        {
+            builder.OpenElement(15, "p");
+            builder.AddAttribute(16, "style", "margin:8px 0 0;font-size:0.88rem;color:#666;");
+            builder.AddContent(17, $"僅顯示前 {maxRows} 筆（共 {rows.Count} 筆）。完整內容請見下方 JSON。");
+            builder.CloseElement();
+        }
+    };
+
+    private static string FormatConceptMapTargets(JsonElement element)
+    {
+        if (!element.TryGetProperty("target", out var targets) || targets.ValueKind != JsonValueKind.Array)
+            return "—";
+
+        var lines = new List<string>();
+        foreach (var t in targets.EnumerateArray())
+        {
+            var code = GetString(t, "code");
+            var rel = GetString(t, "relationship");
+            var parts = new List<string>();
+            if (!string.IsNullOrEmpty(rel))
+                parts.Add(rel);
+            if (!string.IsNullOrEmpty(code))
+                parts.Add(code);
+            if (parts.Count > 0)
+                lines.Add(string.Join(" · ", parts));
+        }
+
+        return lines.Count > 0 ? string.Join("\n", lines) : "—";
+    }
+
+    private static string? GetString(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var p) switch
+        {
+            true when p.ValueKind == JsonValueKind.String => p.GetString(),
+            true when p.ValueKind == JsonValueKind.Number => p.GetRawText(),
+            true when p.ValueKind is JsonValueKind.True or JsonValueKind.False => p.GetBoolean().ToString(),
+            _ => null
+        };
+
+    /// <summary>DomainResource.text.div（FHIR JSON 字串，內含 XHTML）</summary>
+    private static string? GetNarrativeDiv(JsonElement root)
+    {
+        if (!root.TryGetProperty("text", out var text))
+            return null;
+        if (!text.TryGetProperty("div", out var div) || div.ValueKind != JsonValueKind.String)
+            return null;
+        var s = div.GetString();
+        return string.IsNullOrWhiteSpace(s) ? null : s;
+    }
+
+    private static string? GetTextStatus(JsonElement root)
+    {
+        if (!root.TryGetProperty("text", out var text))
+            return null;
+        if (!text.TryGetProperty("status", out var st) || st.ValueKind != JsonValueKind.String)
+            return null;
+        return st.GetString();
+    }
+
+    /// <summary>敘述區塊：先移除 script，再把 HL7 慣用之相對 href 改為官方文件絕對路徑。</summary>
+    private static string PrepareNarrativeHtmlForDisplay(string html, string fhirSpecVersion)
+    {
+        var sanitized = SanitizeNarrativeXhtml(html);
+        var hl7Base = GetHl7OnlineDocumentationBase(fhirSpecVersion);
+        return RewriteNarrativeRelativeLinksToHl7(sanitized, hl7Base);
+    }
+
+    /// <summary>HL7 規格 HTML 根路徑（與官網 build 之 R4/R5/R6 目錄一致）。</summary>
+    private static string GetHl7OnlineDocumentationBase(string fhirSpecVersion)
+    {
+        var v = FhirSpecVersionNormalizer.Normalize(fhirSpecVersion);
+        if (v.StartsWith("4.", StringComparison.Ordinal))
+            return "https://hl7.org/fhir/R4/";
+        if (v.StartsWith("6.", StringComparison.Ordinal))
+            return "https://hl7.org/fhir/R6/";
+        return "https://hl7.org/fhir/R5/";
+    }
+
+    /// <summary>
+    /// 將 text.div 內相對連結（如 <c>href="codesystem-account-status.html"</c>）改為官方站絕對 URL；
+    /// 已是 <c>http(s):</c>、<c>mailto:</c>、純 <c>#anchor</c>、<c>//</c> 者不變。
+    /// </summary>
+    private static string RewriteNarrativeRelativeLinksToHl7(string html, string hl7ReleaseBase)
+    {
+        if (string.IsNullOrEmpty(html))
+            return html;
+
+        var baseWithSlash = hl7ReleaseBase.TrimEnd('/') + "/";
+
+        return NarrativeHrefRegex.Replace(
+            html,
+            m =>
+            {
+                var quote = m.Groups[1].Value;
+                var path = m.Groups[2].Value.Trim();
+                if (path.Length == 0)
+                    return m.Value;
+                if (path[0] == '#')
+                    return m.Value;
+                if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                    return m.Value;
+                if (path.StartsWith("//", StringComparison.Ordinal))
+                    return m.Value;
+
+                var absolute = ResolveHl7NarrativeHref(path, baseWithSlash);
+                return $"href={quote}{absolute}{quote}";
+            });
+    }
+
+    private static string ResolveHl7NarrativeHref(string path, string hl7ReleaseBaseWithSlash)
+    {
+        if (path.StartsWith('/'))
+        {
+            if (path.StartsWith("/fhir/", StringComparison.OrdinalIgnoreCase))
+                return "https://hl7.org" + path;
+            return "https://hl7.org/fhir" + path;
+        }
+
+        return hl7ReleaseBaseWithSlash + path.TrimStart('/');
+    }
+
+    private static readonly Regex NarrativeHrefRegex = new(
+        @"href\s*=\s*(['""])([^'""]*)\1",
+        RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(5));
+
+    /// <summary>阻擋常見 script 注入（敘述仍假設為受信任術語庫內容）。</summary>
+    private static string SanitizeNarrativeXhtml(string html)
+    {
+        if (string.IsNullOrEmpty(html))
+            return "";
+        return NarrativeScriptTagRegex.Replace(html, "");
+    }
+
+    private static readonly Regex NarrativeScriptTagRegex = new(
+        @"<script\b[^>]*>[\s\S]*?</script>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline,
+        TimeSpan.FromSeconds(2));
+}

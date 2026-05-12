@@ -1,0 +1,11 @@
+{
+  "updated": "2026-05-12T09:09:32.7927292+08:00",
+  "dependencies": {
+    "hl7.fhir.core": "4.3.0",
+    "hl7.fhir.r4b.core": "4.3.0",
+    "hl7.fhir.r4b.examples": "4.3.0",
+    "hl7.fhir.r4b.expansions": "4.3.0",
+    "hl7.fhir.r4b.elements": "4.3.0"
+  },
+  "missing": {}
+}

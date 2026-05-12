@@ -1,0 +1,92 @@
+@using System.Text.Json
+
+<div class="json-tree-wrap">
+    @if (_emptyContent)
+    {
+        <p style="margin:0;color:#666;font-size:0.9rem;">（無 JSON 內容）</p>
+    }
+    else if (_parseError is not null)
+    {
+        <p style="margin:0;color:#b71c1c;font-size:0.9rem;">無法解析為 JSON：@_parseError</p>
+    }
+    else if (_root.HasValue)
+    {
+        <JsonTreeNode Element="@_root.Value" Depth="0" />
+    }
+</div>
+
+<style>
+    .json-tree-wrap {
+        margin: 0;
+        padding: 12px;
+        background: #f6f8fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        overflow: auto;
+        max-height: 70vh;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.82rem;
+        line-height: 1.5;
+    }
+    .json-tree-wrap .jtn-line { display: block; word-break: break-word; }
+    .json-tree-wrap .jtn-toggle {
+        display: inline-block;
+        width: 1.25rem;
+        padding: 0;
+        margin: 0 2px 0 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 0.75rem;
+        vertical-align: middle;
+        color: #555;
+    }
+    .json-tree-wrap .jtn-toggle:hover { color: #0d6efd; }
+    .json-tree-wrap .jtn-key { color: #0550ae; }
+    .json-tree-wrap .jtn-idx { color: #6f42c1; }
+    .json-tree-wrap .jtn-str { color: #0a3069; }
+    .json-tree-wrap .jtn-num { color: #0550ae; }
+    .json-tree-wrap .jtn-bool { color: #cf222e; }
+    .json-tree-wrap .jtn-null { color: #6e7781; }
+    .json-tree-wrap .jtn-punct { color: #24292f; }
+    .json-tree-wrap .jtn-meta { color: #6e7781; font-style: italic; margin: 0 4px; }
+</style>
+
+@code {
+    /// <summary>原始 JSON 字串（通常為 FHIR JSON）。</summary>
+    [Parameter]
+    public string? Json { get; set; }
+
+    private JsonElement? _root;
+    private string? _parseError;
+    private bool _emptyContent;
+
+    protected override void OnParametersSet()
+    {
+        _parseError = null;
+        _root = null;
+        _emptyContent = false;
+        if (string.IsNullOrWhiteSpace(Json))
+        {
+            _emptyContent = true;
+            return;
+        }
+
+        var trimmed = Json.Trim();
+        if (string.Equals(trimmed, "(empty body)", StringComparison.OrdinalIgnoreCase))
+        {
+            _emptyContent = true;
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            _root = doc.RootElement.Clone();
+        }
+        catch (Exception ex)
+        {
+            _parseError = ex.Message;
+        }
+    }
+}

@@ -1,0 +1,14 @@
+{
+ "package-id" : "hl7.fhir.it.terminology",
+ "title" : "HL7 Italia FHIR Implementation Guide (terminology)", 
+ "canonical" : "http://terminology.hl7.it", 
+ "introduction" : "This guide describes a set of terminologies (Code System, value sets) and referred assets (e.g. ConceptMap) used in the Italian context",
+ "list" : [{
+  "version" : "current",
+  "desc" : "Continuous Integration Build (latest in version control)",
+  "path" : "http://build.fhir.org/ig/hl7-it/terminology/branches/main",
+  "status" : "ci-build",
+	"current" : true  
+ }]
+    }
+  

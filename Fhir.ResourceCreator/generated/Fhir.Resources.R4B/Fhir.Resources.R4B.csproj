@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Fhir.Resources.R4B</RootNamespace>
+    <AssemblyName>Fhir.Resources.R4B</AssemblyName>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>Fhir.Resources.R4B</PackageId>
+    <PackageVersion>4.3.0</PackageVersion>
+    <Description>FHIR resource POCOs generated from hl7.fhir.r4b.core (4.3.0).</Description>
+    <PackageTags>FHIR;HL7;generated</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="**/*.Tests/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Fhir.TypeFramework\Fhir.TypeFramework.csproj" />
+  </ItemGroup>
+</Project>
